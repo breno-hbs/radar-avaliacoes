@@ -1,0 +1,175 @@
+# Especificação técnica v1 — Radar de Avaliações
+
+Oct 28, 2026 · @Breno
+
+## Promessa e limites
+
+**A v1 demonstra que é possível detectar reclamações, priorizar os casos críticos e transformar os demais problemas em ações acompanháveis para um restaurante pequeno, tudo sobre dados simulados.** "Radar de Avaliações" é o nome de trabalho.
+
+**Perfil do usuário:** dono de um restaurante comum em São Paulo, uma loja só, sem tempo para ler centenas de comentários.
+
+**Limites que valem em código, README, vídeo e posts:**
+
+- As avaliações são **sintéticas**, geradas por IA com problemas controlados. Nada vem do iFood.
+- **Não há integração** com sistemas do iFood. As ações do painel são registros internos e nenhuma resposta é publicada em lugar algum.
+- O "antes e depois" entre semanas prova o **mecanismo de medição**, não o efeito real de uma ação. Não prova causalidade.
+- Economia de horas é **estimativa de cenário**.
+- Diagnósticos são **hipóteses** com evidência, nunca certezas: a IA não conhece a operação do restaurante.
+- Alertas críticos são **relatos a verificar**, não fatos comprovados.
+
+## Arquitetura
+
+&#91;embedded content: arquitetura da v1 · 5 componentes, 4 conexões e 1 alerta direto\]
+
+O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o entrega pelo Telegram. O alerta crítico sai direto do FastAPI, em vermelho. O dono abre o painel pelo link da mensagem, e o painel só conversa com o FastAPI.
+
+## Categorias e criticidade
+
+**Cada avaliação recebe zero ou mais categorias e, separadamente, zero ou mais marcações críticas.** A criticidade não compete com as categorias: uma reação alérgica pode ser "qualidade e temperatura" e ainda ter a marcação de risco à saúde. Avaliações positivas ficam sem categoria.
+
+| Categoria | O que cobre | Ação recomendada no card | O restaurante controla? |
+| --- | --- | --- | --- |
+| `atraso` | Demora no preparo ou na entrega | Investigar o gargalo nos horários das reclamações, sem presumir a causa | Parcialmente |
+| `item_faltando` | Item ausente ou errado | Criar checklist de conferência antes de fechar a sacola | Sim |
+| `qualidade_temperatura` | Comida fria, sabor, ingrediente, preparo | Revisar o preparo ou a conservação do prato citado | Em parte (temperatura também depende do transporte) |
+| `embalagem` | Vazamento, amassado, embalagem inadequada | Testar melhoria da embalagem do item citado | Sim |
+| `atendimento` | Trato do restaurante com o cliente | Orientar a equipe responsável | Sim |
+| `entregador` | Problema com o entregador | Classificar como problema de entrega e registrar ocorrência; sem ação interna | Não |
+
+**Marcações críticas:** `saude` (intoxicação, mal-estar, objeto estranho), `alergia` e `cobranca_indevida`. Todas são tratadas como **relato a verificar**.
+
+**Fora das marcações:** ofensa e discriminação. O blog de parceiros do iFood informa que comentários ofensivos são descartados antes de chegar à loja ([fonte](https://blog-parceiros.ifood.com.br/avaliacoes-e-moderacoes/)), então o dono provavelmente nunca os veria.
+
+**Decisão em aberto para depois da avaliação:** `qualidade_temperatura` fica junta na v1. Se a matriz de erros da Fase 1 mostrar confusão com `atraso` e `embalagem`, ou se o dono precisar de ações diferentes, a categoria é dividida.
+
+## Contratos e dados
+
+**O FastAPI é o único dono das regras e dos dados.** O n8n, o simulador e o painel só chamam as rotas abaixo, e o Telegram só recebe mensagens.
+
+| Rota | Quem chama | Autenticação | O que faz |
+| --- | --- | --- | --- |
+| `POST /avaliacoes` | Simulador | Cabeçalho `X-API-Key` | Recebe `id_externo`, `texto`, `nota`, `recebida_em`. Valida, ignora duplicata, classifica e, se houver marcação crítica, cria o alerta |
+| `GET /resumo-semanal` | n8n | `X-API-Key` | Devolve período, total, negativas, 3 principais problemas, críticos, ações pendentes e o link do painel |
+| `GET /painel/{token}` | Dono (navegador) | Token assinado com validade | Serve a página mobile-first |
+| `GET /api/painel/{token}/cards` | Painel | Token | Cards com problema, evidências e recomendação |
+| `POST /api/painel/{token}/acoes` | Painel | Token | Registra uma ação |
+| `PATCH /api/painel/{token}/acoes/{id}` | Painel | Token | Muda o estado da ação |
+| `GET /api/painel/{token}/historico` | Painel | Token | Semanas anteriores |
+
+**Regras de segurança:**
+
+- O token é opaco, assinado e com prazo de validade; a URL não carrega dado sensível. Cada resumo semanal gera um link novo.
+- A chave `X-API-Key`, o token do bot e o segredo de assinatura ficam em variáveis de ambiente. Nunca entram no código nem no GitHub.
+- Requisição sem chave, ou com link expirado, é recusada.
+
+**Tabelas (SQLite):**
+
+| Tabela | Campos principais |
+| --- | --- |
+| `avaliacoes` | `id`, `id_externo` (único), `texto`, `nota`, `recebida_em`, `prazo_resposta` (= recebida\_em + 5 dias), `categorias`, `criticidade`, `confianca` |
+| `alertas` | `id`, `avaliacao_id`, `tipo`, `estado`, `tentativas`, `criado_em`, `enviado_em`; único por (`avaliacao_id`, `tipo`) |
+| `acoes` | `id`, `categoria`, `semana_inicio`, `estado`, `criada_em`, `concluida_em`, `nota` |
+
+**Estados:** alerta → `pendente`, `enviado` ou `falhou`. Ação → `pendente`, `em_andamento` ou `concluida`.
+
+**Ordem do alerta:** o FastAPI grava o alerta como `pendente` **antes** de chamar o Telegram, marca `enviado` ao confirmar e tenta de novo uma vez se falhar. A restrição de unicidade impede alerta repetido para a mesma avaliação. O histórico semanal é calculado das tabelas, sem tabela própria.
+
+## Regras de negócio
+
+**O dono vê no máximo 3 cards por semana, ordenados por impacto, e decide tudo em menos de 2 minutos.**
+
+- **Pontuação de um problema:** menções × gravidade × tendência. A gravidade é um peso fixo por categoria, definido na Fase 2 e documentado. A tendência soma ponto quando o problema subiu em relação à semana anterior.
+- **Conteúdo de um card:** o problema em uma linha, a quantidade e o período, até 3 trechos reais como evidência, a recomendação e o botão "registrar ação". O que não entra nos 3 cards fica um toque adiante, em "outros temas".
+- **Linha de cobertura fixa:** total de avaliações lidas, cards, temas monitorados sem ação e avaliações que a IA não soube classificar (baixa confiança).
+- **Sem presumir causa:** o texto diz "o padrão sugere" e recomenda investigar. Entregador nunca gera ação interna.
+- **Alerta crítico:** sai na hora em que a avaliação entra no endpoint, com o texto "relato a verificar", uma vez por ocorrência. Os casos críticos também contam no resumo semanal.
+- **Resumo semanal:** segunda-feira às 8h, no fuso America/Sao\_Paulo. Só é enviado se houver algo a decidir; um indicador "última leitura" no painel mostra que o sistema está vivo.
+- **Medição do efeito:** compara a taxa de menções por 100 avaliações entre semanas, antes e depois de uma ação concluída. É uma comparação simulada e não prova causalidade.
+- **Prazo de resposta:** cada avaliação guarda o prazo de 5 dias do iFood, para a versão futura de respostas em lote ([fonte](https://blog-parceiros.ifood.com.br/avaliacoes-e-moderacoes/)). Na v1, os rascunhos de resposta em lote são opcionais e o primeiro corte se houver atraso.
+
+## Avaliação, critérios de aceitação e cronograma
+
+**A v1 só está pronta quando a classificação é medida e os oito critérios abaixo são comprovados.**
+
+**Conjuntos de avaliação (rotulados à mão):**
+
+- **50 avaliações gerais**, com casos de vários problemas por avaliação e avaliações positivas.
+- **15 casos críticos separados**, incluindo negativas e ambiguidades ("não passei mal", "achei estranho o gosto"), para medir falsos alertas e casos não detectados.
+- **Métricas:** F1 micro, F1 macro, F1 por categoria e, nos críticos, o recall como contagem (por exemplo, 14 de 15) mais os falsos alertas.
+
+**Ressalvas que vão para o README e para os posts:**
+
+- 50 avaliações avaliam o protótipo; não garantem desempenho em produção.
+- Os 15 casos críticos são uma amostra enriquecida, não representam a frequência real.
+- Se a mesma IA gera os dados e classifica, a taxa de acerto sai inflada. Escreva parte dos exemplos à mão, varie o prompt de geração e declare isso.
+- O teste com 1 ou 2 pessoas é exploratório, não validação estatística de usabilidade.
+
+| # | Critério | Como comprovar | Fase |
+| --- | --- | --- | --- |
+| 1 | Classificação multirótulo | 50 avaliações rotuladas e métricas reportadas | 1 |
+| 2 | Casos críticos | 15 casos testados, com falsos negativos e falsos alertas contados | 1 |
+| 3 | Sem duplicidade | Reenviar a mesma avaliação não gera outra avaliação nem outro alerta | 2 |
+| 4 | Segurança | Endpoint sem chave e link expirado são recusados | 2 |
+| 5 | Alerta imediato | Tempo medido entre a entrada no endpoint e a confirmação do Telegram | 3 |
+| 6 | Resumo semanal | Workflow do n8n executado manualmente, com histórico de execução | 3 |
+| 7 | Painel com persistência e histórico | Registrar ação, reiniciar o servidor e recuperar; consultar semanas anteriores | 4 |
+| 8 | Decisão em 2 minutos | Fluxo testado com 1 ou 2 pessoas, tempos registrados | 4 |
+
+**Cronograma de 3 semanas** (datas previstas, partindo de 29/10/2026; se o seu tempo de estudo for menor, as datas andam e o escopo não muda):
+
+| Semana | Fases | Resultado verificável |
+| --- | --- | --- |
+| 1 (29/10 a 04/11) | 0 e 1: fundamentos, dataset sintético, rotulação, primeira classificação | Dataset 50 + 15 rotulado e métricas iniciais |
+| 2 (05/11 a 11/11) | 2 e 3: FastAPI, SQLite, endpoint seguro, alertas críticos, n8n | Alerta com tempo medido e workflow executado |
+| 3 (12/11 a 18/11) | 4: painel, ações persistidas, histórico, teste de 2 minutos, demonstração | Vídeo de 2 minutos, link do app e README |
+
+**Ordem de corte se atrasar:** primeiro os rascunhos de resposta em lote. Os testes de classificação e a persistência nunca saem.
+
+## Cobertura dos requisitos da vaga
+
+**Cada requisito da trilha AI Builder do iFood tem um lugar concreto na v1.**
+
+| Requisito da trilha | Onde é praticado |
+| --- | --- |
+| Prompt engineering avançado | Classificação multirótulo e geração do diagnóstico, com prompts versionados e testados contra os conjuntos rotulados |
+| Orquestração de agentes (Claude, GPT, Gemini) | Classificador, priorizador/diagnóstico e (opcional) redator de respostas como papéis separados; um deles pode ser trocado de modelo para comparar |
+| Automações com n8n, Make ou Zapier | Workflow semanal no n8n: agenda, chama `GET /resumo-semanal`, envia pelo Telegram |
+| Vibe coding (Cursor, v0, Bolt, Replit) | Painel mobile-first feito em uma dessas ferramentas, ligado à API |
+| APIs sem backend profundo | FastAPI pequeno com 7 rotas e SQLite |
+| Análise de dados com IA | Classificação, agregação por semana, tendência e métricas de avaliação |
+| Redesenhar a função criando agentes | Documento "antes e depois" do trabalho de ler avaliações, com tempo manual estimado e tempo no painel |
+| Aprender o Toqan (plataforma interna do iFood) | Não há acesso público encontrado; o conceito de agente (instruções, ferramentas e conhecimento) é praticado nos papéis acima |
+
+Do portfólio esperado: **ferramenta publicada** (painel no ar), **dashboard funcional** (painel), **agente que resolve problema de negócio** (os papéis acima), **automação** (n8n) e **produto do zero em dias** (cronograma de 3 semanas). Economia de horas é estimativa de cenário e deve ser descrita assim.
+
+## Fora da v1 e riscos
+
+**Escopo congelado em 28/10/2026.** Ideia nova entra na lista "Depois do MVP", não na v1.
+
+**Depois do MVP:**
+
+- Respostas em lote com aprovação do dono, mostrando o prazo de 5 dias. Autonomia futura só com amostra mínima, gravidade e revisão humana; nunca para casos críticos.
+- Integração real: o iFood tem um módulo de avaliações no portal de desenvolvedores ([página do módulo](https://developer.ifood.com.br/pt-BR/docs/guides/review/)). Não consegui abrir a documentação, e um relato aponta o endpoint `GET /merchants/{merchantId}/reviews`, não verificado por mim. A integração provavelmente exigiria acesso autorizado e um coletor periódico que encaminhasse novas avaliações ao `POST /avaliacoes`.
+- WhatsApp no lugar do Telegram. A Cloud API tem número de teste gratuito, mas fora da janela de 24 horas exige templates aprovados ([guia da Cliengo](https://guiawabusiness.cliengo.com/whatsapp-cloud-api)); o tempo de aprovação não foi encontrado.
+- Gráficos, filtros por status, perguntas em texto sobre os dados e comparação ajustada por volume de pedidos.
+
+**Riscos:**
+
+| Risco | Resposta |
+| --- | --- |
+| Aprender n8n, Telegram e a ferramenta de vibe coding do zero | Uma coisa nova por fase, e o n8n só na Semana 2 |
+| Classificação inflada por dados gerados pela mesma IA | Parte dos exemplos escrita à mão e prompts de geração variados, declarado no README |
+| Muito escopo para 3 semanas | Ordem de corte definida; testes e persistência não saem |
+| Tempo de estudo menor que o previsto | As datas andam, o escopo não; as horas por dia ainda precisam ser definidas |
+| Vazar chave ou segredo no repositório público | `.env` fora do Git e uma busca no histórico antes de publicar |
+
+## Como construir
+
+**O desenvolvimento é feito no Claude Code, com uma arquitetura de agentes definida antes da primeira linha de código**, para que cada agente respeite os mesmos contratos desta especificação.
+
+- **Repositório:** `radar-avaliacoes`, público só depois de uma busca por segredos no histórico (`git log --all -S` com os valores sensíveis) e com `.env` fora do Git.
+- **`CLAUDE.md`:** contém esta especificação resumida, as seis categorias, as rotas, os estados e as regras de segurança.
+- **Subagentes:** um para a API e o banco, um para o classificador e as métricas, um para o painel e um revisor que lê o código em contexto limpo contra a especificação.
+- **Testes primeiro nos pontos de risco:** duplicidade, autenticação, expiração do link e persistência após reiniciar.
+- **Modo aula e modo prova:** a cada fase, o porquê é explicado antes do código, e depois você explica o que foi construído com as suas palavras, sem consultar.
+- **Documentação:** README com o que é simulado, as métricas medidas, as ressalvas e um vídeo de demonstração de 2 minutos.
