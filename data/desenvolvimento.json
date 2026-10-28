@@ -1,0 +1,202 @@
+[
+  {
+    "id_externo": "dev-001",
+    "conjunto": "desenvolvimento",
+    "nota": 4,
+    "texto": "o lanche tava muito bom, mas demorou uma eternidade pra chegar aqui",
+    "categorias": ["atraso"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata demora explícita, mesmo demonstrando satisfação com a comida."
+  },
+  {
+    "id_externo": "dev-002",
+    "conjunto": "desenvolvimento",
+    "nota": 2,
+    "texto": "pedi dois x-burguer e só mandaram um, aí fica difícil né",
+    "categorias": ["item_faltando"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata ausência de um produto solicitado no pedido."
+  },
+  {
+    "id_externo": "dev-003",
+    "conjunto": "desenvolvimento",
+    "nota": 2,
+    "texto": "a batata tava toda murcha e encharcada de óleo, não curti",
+    "categorias": ["qualidade_temperatura"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata problemas na textura e na qualidade do preparo."
+  },
+  {
+    "id_externo": "dev-004",
+    "conjunto": "desenvolvimento",
+    "nota": 2,
+    "texto": "a tampa do copo veio solta e derramou refri dentro da sacola",
+    "categorias": ["embalagem"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata falha no fechamento da embalagem e vazamento. O item chegou; não há relato de item ausente."
+  },
+  {
+    "id_externo": "dev-005",
+    "conjunto": "desenvolvimento",
+    "nota": 1,
+    "texto": "mandei mensagem pra loja umas três vezes e ninguém me respondeu",
+    "categorias": ["atendimento"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata falta de resposta na comunicação com o restaurante."
+  },
+  {
+    "id_externo": "dev-006",
+    "conjunto": "desenvolvimento",
+    "nota": 2,
+    "texto": "o motoboy foi muito grosso comigo, ficou falando aos gritos sem necessidade",
+    "categorias": ["entregador"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata comportamento inadequado do entregador, sem atribuir outro problema."
+  },
+  {
+    "id_externo": "dev-007",
+    "conjunto": "desenvolvimento",
+    "nota": 2,
+    "texto": "pedi o macarrão sem bacon e veio cheio, aí fui falar com a loja e me deixaram no vácuo no chat",
+    "categorias": ["item_faltando", "atendimento"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Composição diferente da solicitada (item_faltando) e falta de resposta da loja no chat (atendimento)."
+  },
+  {
+    "id_externo": "dev-008",
+    "conjunto": "desenvolvimento",
+    "nota": 2,
+    "texto": "pedi um yakisoba, chegou quase 50 min depois da previsão e tava gelado. pra completar, a sacola veio rasgada",
+    "categorias": ["atraso", "qualidade_temperatura", "embalagem"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Demora além do previsto (atraso), temperatura inadequada de alimento normalmente servido quente (qualidade_temperatura) e dano explícito na sacola (embalagem). Sem presumir relação causal."
+  },
+  {
+    "id_externo": "dev-009",
+    "conjunto": "desenvolvimento",
+    "nota": 1,
+    "texto": "a janta chegou quase 1h depois do previsto, a tampa da marmita tava aberta e o motoboy largou na portaria sem avisar, sendo que pedi pra entregar na mão",
+    "categorias": ["atraso", "embalagem", "entregador"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Atraso explícito, embalagem aberta e descumprimento da instrução de entrega na mão (entregador). O atraso não é atribuído ao entregador."
+  },
+  {
+    "id_externo": "dev-010",
+    "conjunto": "desenvolvimento",
+    "nota": 1,
+    "texto": "mandaram minha pizza com a borda errada, a massa tava toda borrachuda e quando reclamei a pessoa da loja me respondeu com grosseria",
+    "categorias": ["item_faltando", "qualidade_temperatura", "atendimento"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Borda diferente da solicitada (item_faltando), textura borrachuda (qualidade_temperatura) e resposta grosseira da loja (atendimento)."
+  },
+  {
+    "id_externo": "dev-011",
+    "conjunto": "desenvolvimento",
+    "nota": 5,
+    "texto": "comida sensacional, tempero perfeito e porção generosa! só a tampa da marmita que veio meio solta, podia fechar melhor. mas merecem 5 estrelas",
+    "categorias": ["embalagem"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Apesar da nota 5 e dos elogios, relata tampa solta. Qualquer relato explícito de problema recebe o rótulo."
+  },
+  {
+    "id_externo": "dev-012",
+    "conjunto": "desenvolvimento",
+    "nota": 5,
+    "texto": "tudo certinho, gostei 👍",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Sem problema relatado."
+  },
+  {
+    "id_externo": "dev-013",
+    "conjunto": "desenvolvimento",
+    "nota": 5,
+    "texto": "pedi almoço pra mim e pra minha mãe e adoramos! veio tudo bem servido, os acompanhamentos estavam certinhos, comida quentinha e saborosa. o entregador foi super educado também. com certeza vamos pedir de novo",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Comentário exclusivamente positivo. Mencionar o entregador sem reclamação de conduta não gera rótulo; comida quentinha não é problema."
+  },
+  {
+    "id_externo": "dev-014",
+    "conjunto": "desenvolvimento",
+    "nota": 1,
+    "texto": "comi a marmita no almoço e umas horas depois comecei a passar mal, fiquei com um enjoo muito forte",
+    "categorias": [],
+    "criticidade": ["saude"],
+    "fora_do_escopo": false,
+    "justificativa": "Relato de mal-estar após consumo. Não exige confirmação de que o restaurante causou. Sem problema operacional explícito."
+  },
+  {
+    "id_externo": "dev-015",
+    "conjunto": "desenvolvimento",
+    "nota": 1,
+    "texto": "pedi o açaí sem amendoim pq sou alérgica, mas chegou com amendoim por cima. ainda bem que vi antes de comer",
+    "categorias": ["item_faltando"],
+    "criticidade": ["alergia"],
+    "fora_do_escopo": false,
+    "justificativa": "Composição diferente da solicitada (item_faltando) e presença de alérgeno para cliente alérgica (alergia), mesmo sem reação."
+  },
+  {
+    "id_externo": "dev-016",
+    "conjunto": "desenvolvimento",
+    "nota": 1,
+    "texto": "passaram meu cartão duas vezes pelo mesmo pedido, fui olhar no extrato e tinha duas cobranças iguais",
+    "categorias": [],
+    "criticidade": ["cobranca_indevida"],
+    "fora_do_escopo": false,
+    "justificativa": "Cobrança duplicada pelo mesmo pedido. A marcação crítica cobre o problema, por isso fora_do_escopo permanece false."
+  },
+  {
+    "id_externo": "dev-017",
+    "conjunto": "desenvolvimento",
+    "nota": 2,
+    "texto": "não tive reação alérgica nem nada, mas pedi meu lanche sem cebola e mandaram com cebola",
+    "categorias": ["item_faltando"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata erro na composição solicitada. A reação alérgica é explicitamente negada e não há declaração de alergia ou risco concreto."
+  },
+  {
+    "id_externo": "dev-018",
+    "conjunto": "desenvolvimento",
+    "nota": 2,
+    "texto": "o frango tava com um gosto esquisito, mas não passei mal nem nada. não curti",
+    "categorias": ["qualidade_temperatura"],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata sabor desagradável. A negação de mal-estar não constitui relato de evento crítico."
+  },
+  {
+    "id_externo": "dev-019",
+    "conjunto": "desenvolvimento",
+    "nota": 3,
+    "texto": "o combo custou o que tava no cardápio mesmo, mas achei caro demais pelo que oferecem",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": true,
+    "justificativa": "Preço considerado alto, sem alegação de cobrança incorreta. Não pertence às seis categorias nem às marcações críticas."
+  },
+  {
+    "id_externo": "dev-020",
+    "conjunto": "desenvolvimento",
+    "nota": 1,
+    "texto": "o suporte do aplicativo fica encerrando meu chamado sem resolver nada, já tentei falar com eles umas três vezes",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": true,
+    "justificativa": "Reclamação do suporte da plataforma, não do restaurante. Sem categoria, fora do escopo."
+  }
+]
