@@ -1,0 +1,194 @@
+[
+  {
+    "id_externo": "crit-001",
+    "conjunto": "critico",
+    "nota": 2,
+    "texto": "achei uma pecinha de metal no meio do arroz, parecia um grampo. parei de comer na hora",
+    "categorias": [],
+    "criticidade": [
+      "saude"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "Relata a presença de um objeto metálico estranho no alimento, representando possível risco à saúde. Não há outro problema operacional explicitamente descrito."
+  },
+  {
+    "id_externo": "crit-002",
+    "conjunto": "critico",
+    "nota": 1,
+    "texto": "jantei o peixe ontem e passei a madrugada indo ao banheiro, com febre. tô desconfiado que pode ter sido intoxicação",
+    "categorias": [],
+    "criticidade": [
+      "saude"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "Relata febre e diarreia após consumir a refeição e levanta suspeita de intoxicação. Não é necessário comprovar que o alimento causou os sintomas."
+  },
+  {
+    "id_externo": "crit-003",
+    "conjunto": "critico",
+    "nota": 3,
+    "texto": "o pastel tava bem servido, mas minha mãe comeu um pedaço e começou a vomitar logo depois. fiquei preocupado",
+    "categorias": [],
+    "criticidade": [
+      "saude"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "Evento concreto de mal-estar após consumo, relatado sobre a mãe. O guia não limita a marcação a quem escreveu a avaliação. O elogio à porção não elimina a criticidade."
+  },
+  {
+    "id_externo": "crit-004",
+    "conjunto": "critico",
+    "nota": 2,
+    "texto": "pedi farofa extra e não mandaram. quando fui cortar o frango, achei um pedaço de plástico duro misturado na carne",
+    "categorias": [
+      "item_faltando"
+    ],
+    "criticidade": [
+      "saude"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "Relata ausência de um acompanhamento solicitado (item_faltando) e presença de material estranho no alimento, risco concreto à saúde (saude). Não é necessário relatar lesão."
+  },
+  {
+    "id_externo": "crit-005",
+    "conjunto": "critico",
+    "nota": 4,
+    "texto": "o caldo tava gostoso, mas a tampa do pote veio rachada e vazou na sacola. depois fiquei com cólicas, só não sei se foi por causa dele",
+    "categorias": [
+      "embalagem"
+    ],
+    "criticidade": [
+      "saude"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "Descreve tampa rachada e vazamento (embalagem), além de cólicas após o consumo (saude). A incerteza sobre a causa não elimina o relato concreto de mal-estar."
+  },
+  {
+    "id_externo": "crit-006",
+    "conjunto": "critico",
+    "nota": 4,
+    "texto": "tenho alergia a gergelim e o pão do hambúrguer veio cheio de sementinha por cima. percebi antes de dar a primeira mordida",
+    "categorias": [],
+    "criticidade": [
+      "alergia"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "O cliente declara alergia a gergelim e relata a presença desse alérgeno no alimento. Há risco concreto mesmo sem ingestão ou reação. Nenhuma categoria operacional."
+  },
+  {
+    "id_externo": "crit-007",
+    "conjunto": "critico",
+    "nota": 1,
+    "texto": "comi um pedaço da sobremesa e comecei a ficar com placas vermelhas na pele e muita coceira. sou alérgico a pistache e depois vi que tinha no recheio",
+    "categorias": [],
+    "criticidade": [
+      "alergia"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "Relata reação alérgica após consumir sobremesa com ingrediente ao qual declara ser alérgico. Recebe somente alergia (guia v1.1). Não exige confirmação de causalidade."
+  },
+  {
+    "id_externo": "crit-008",
+    "conjunto": "critico",
+    "nota": 2,
+    "texto": "sou alérgica a nozes e só descobri depois de provar o creme que levava nozes. no cardápio não falava nada desse ingrediente, fiquei assustada",
+    "categorias": [],
+    "criticidade": [
+      "alergia"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "Relata ingestão de alimento com alérgeno ao qual declara ser alérgica, identificado só depois do consumo. A ausência da informação no cardápio é contexto do risco, não uma queixa separada."
+  },
+  {
+    "id_externo": "crit-009",
+    "conjunto": "critico",
+    "nota": 2,
+    "texto": "pedi o macarrão com molho separado, mas misturaram tudo no prato. depois a loja confirmou que o molho tinha castanha e minha filha é alérgica. ainda bem que ela não chegou a comer",
+    "categorias": [
+      "item_faltando"
+    ],
+    "criticidade": [
+      "alergia"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "O molho foi entregue em composição diferente da solicitada (item_faltando). O alimento passou a conter um alérgeno que representa risco concreto para a filha do cliente (alergia), mesmo sem ingestão ou reação."
+  },
+  {
+    "id_externo": "crit-010",
+    "conjunto": "critico",
+    "nota": 3,
+    "texto": "pedi um bowl de frango e mandaram um de camarão. tenho alergia a camarão e só percebi quando tirei a tampa, ainda bem que olhei",
+    "categorias": [
+      "item_faltando"
+    ],
+    "criticidade": [
+      "alergia"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "Prato diferente do solicitado (item_faltando), contendo alérgeno ao qual declara ser alérgico (alergia). Não há necessidade de reação para sinalizar o risco."
+  },
+  {
+    "id_externo": "crit-011",
+    "conjunto": "critico",
+    "nota": 2,
+    "texto": "no resumo da compra tava 36,90 e no meu banco descontou 48,90. conferi tudo e eram os mesmos itens, não coloquei nenhum adicional",
+    "categorias": [],
+    "criticidade": [
+      "cobranca_indevida"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "Débito superior ao valor apresentado na compra, sem alterações nos itens. Alegação concreta de cobrança incorreta, não mera insatisfação com o preço."
+  },
+  {
+    "id_externo": "crit-012",
+    "conjunto": "critico",
+    "nota": 1,
+    "texto": "fui olhar o comprovante e cobraram um suco de 9 reais que eu nem coloquei no carrinho. paguei por uma coisa que não pedi",
+    "categorias": [],
+    "criticidade": [
+      "cobranca_indevida"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "Cobrança efetiva de um produto que não foi solicitado. Sem item_faltando, pois o texto não informa o que foi entregue, apenas o que foi cobrado."
+  },
+  {
+    "id_externo": "crit-013",
+    "conjunto": "critico",
+    "nota": 3,
+    "texto": "fiz o pix do pedido, a tela travou e achei que não tinha ido. tentei de novo e depois vi no extrato que saíram os dois pagamentos pra mesma compra",
+    "categorias": [],
+    "criticidade": [
+      "cobranca_indevida"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "Relata dois pagamentos Pix concluídos para o mesmo pedido. Mesmo com a repetição feita pelo cliente após um travamento, há relato de pagamento duplicado."
+  },
+  {
+    "id_externo": "crit-014",
+    "conjunto": "critico",
+    "nota": 1,
+    "texto": "minha janta nunca apareceu aqui, mas deram baixa como entregue. depois cancelaram no chat dizendo que não ia cobrar e mesmo assim descontaram tudo do cartão",
+    "categorias": [
+      "atraso"
+    ],
+    "criticidade": [
+      "cobranca_indevida"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "O pedido nunca chegou (atraso, v1) e há cobrança apesar da confirmação de cancelamento sem custo (cobranca_indevida). Responsável pela baixa não identificado; não atribuído ao entregador."
+  },
+  {
+    "id_externo": "crit-015",
+    "conjunto": "critico",
+    "nota": 2,
+    "texto": "veio sem a coca que fazia parte do combo. a loja reconheceu e disse que devolveria o valor da bebida até ontem, mas não caiu nada e continuo pagando por ela",
+    "categorias": [
+      "item_faltando"
+    ],
+    "criticidade": [
+      "cobranca_indevida"
+    ],
+    "fora_do_escopo": false,
+    "justificativa": "Bebida do combo não entregue (item_faltando). O cliente relata que continua pagando por item que a loja reconheceu não entregue, após vencer o prazo de estorno prometido (cobrança relatada como incorreta)."
+  }
+]
