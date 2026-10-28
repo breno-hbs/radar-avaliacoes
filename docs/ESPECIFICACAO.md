@@ -26,14 +26,14 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 ## Categorias e criticidade
 
-**Cada avaliação recebe zero ou mais categorias e, separadamente, zero ou mais marcações críticas.** A criticidade não compete com as categorias: uma reação alérgica pode ser "qualidade e temperatura" e ainda ter a marcação de risco à saúde. Avaliações positivas ficam sem categoria.
+**Cada avaliação recebe zero ou mais categorias e, separadamente, zero ou mais marcações críticas.** A criticidade não compete com as categorias: uma reação alérgica pode ser "qualidade e temperatura" e ainda ter a marcação de risco à saúde. A classificação considera o conteúdo da avaliação, independentemente da nota atribuída. Avaliações sem relato de problema recebem zero categorias. Avaliações com nota alta que mencionem explicitamente um problema recebem os rótulos correspondentes.
 
 | Categoria | O que cobre | Ação recomendada no card | O restaurante controla? |
 | --- | --- | --- | --- |
 | `atraso` | Demora no preparo ou na entrega | Investigar o gargalo nos horários das reclamações, sem presumir a causa | Parcialmente |
 | `item_faltando` | Item ausente ou errado | Criar checklist de conferência antes de fechar a sacola | Sim |
-| `qualidade_temperatura` | Comida fria, sabor, ingrediente, preparo | Revisar o preparo ou a conservação do prato citado | Em parte (temperatura também depende do transporte) |
-| `embalagem` | Vazamento, amassado, embalagem inadequada | Testar melhoria da embalagem do item citado | Sim |
+| `qualidade_temperatura` | Comida fria, sabor, ingrediente, preparo, porção e apresentação | Revisar o preparo ou a conservação do prato citado | Em parte (temperatura também depende do transporte) |
+| `embalagem` | Vazamento, embalagem amassada ou inadequada | Testar melhoria da embalagem do item citado | Sim |
 | `atendimento` | Trato do restaurante com o cliente | Orientar a equipe responsável | Sim |
 | `entregador` | Problema com o entregador | Classificar como problema de entrega e registrar ocorrência; sem ação interna | Não |
 
