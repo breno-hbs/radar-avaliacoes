@@ -33,6 +33,11 @@ Escreva o teste ANTES do código nestes pontos de risco:
 - Detecção de criticidade, incluindo negações e ambiguidades
 Rode os testes relevantes e informe o resultado real. Nunca diga que passaram sem executá-los.
 
+## Rotulação
+- Fonte das regras de rotulação: docs/GUIA_ROTULACAO.md, versão 1.1.
+- As seis categorias: `atraso`, `item_faltando`, `qualidade_temperatura`, `embalagem`,
+  `atendimento` e `entregador`.
+
 ## Dados de avaliação
 - 20 de desenvolvimento: únicos usados para ajustar prompt, regras e few-shot.
 - 50 gerais e 15 críticos: só medem. Nunca use esses exemplos para ajustar nada.

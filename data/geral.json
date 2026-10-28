@@ -1,0 +1,594 @@
+[
+  {
+    "id_externo": "ger-001",
+    "conjunto": "geral",
+    "nota": 1,
+    "texto": "na hora de pegar a sacola o entregador soltou um 'se vira aí' e saiu me xingando. sem necessidade nenhuma",
+    "categorias": [
+      "entregador"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O cliente descreve ofensas e comportamento inadequado do entregador. Não relata demora nem problema com o pedido."
+  },
+  {
+    "id_externo": "ger-002",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "avisei pelo chat pra deixar na portaria do bloco B, mas o motoboy entregou pra um vizinho de outro prédio mesmo eu explicando onde era",
+    "categorias": [
+      "entregador"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O entregador descumpriu uma instrução explícita sobre o local de entrega. Não há relato de atraso."
+  },
+  {
+    "id_externo": "ger-003",
+    "conjunto": "geral",
+    "nota": 1,
+    "texto": "o entregador bateu a sacola no portão de propósito, fiquei sem acreditar. a caixinha do doce chegou toda amassada",
+    "categorias": [
+      "entregador",
+      "embalagem"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Há uma conduta inadequada atribuída ao entregador e um dano descrito na embalagem do doce. São dois problemas distintos."
+  },
+  {
+    "id_externo": "ger-004",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "ninguém aqui teve alergia nem ficou doente, mas o purê veio cheio de grumos e praticamente sem tempero",
+    "categorias": [
+      "qualidade_temperatura"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O cliente relata defeitos na textura e no tempero. As menções a alergia e doença são negativas explícitas, sem indício de risco concreto."
+  },
+  {
+    "id_externo": "ger-005",
+    "conjunto": "geral",
+    "nota": 3,
+    "texto": "o molho de mostarda tinha um amargor muito forte, estragou o gosto do sanduíche pra mim. o resto tava ok",
+    "categorias": [
+      "qualidade_temperatura"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O sabor desagradável do molho caracteriza problema de qualidade. Não existe relato de dano à saúde."
+  },
+  {
+    "id_externo": "ger-006",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "na hora de fechar o pedido o app apagou meu carrinho, tive que escolher tudo de novo. que raiva",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": true,
+    "justificativa": "Reclamação sobre o funcionamento do aplicativo, sem problema atribuído ao restaurante e sem indício de cobrança indevida."
+  },
+  {
+    "id_externo": "ger-007",
+    "conjunto": "geral",
+    "nota": 4,
+    "texto": "a pizza era pra chegar 18h30 e apareceu quase 20h. ainda dei 4 estrelas porque tava muito bem feita",
+    "categorias": [
+      "atraso"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "A entrega ocorreu depois do horário previsto. A nota 4 e o elogio à pizza não anulam o relato de atraso."
+  },
+  {
+    "id_externo": "ger-008",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "fui perguntar sobre os ingredientes pelo chat e cada pessoa da loja dava uma informação diferente, no fim ninguém esclareceu minha dúvida",
+    "categorias": [
+      "atendimento"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O cliente recebeu informações inconsistentes da equipe do restaurante e não teve sua dúvida esclarecida. É problema de atendimento; perguntar sobre ingredientes não é relato de alergia."
+  },
+  {
+    "id_externo": "ger-009",
+    "conjunto": "geral",
+    "nota": 1,
+    "texto": "o combo vinha com duas sobremesas e só recebi uma. quando fui conferir na porta, o entregador ainda ficou debochando de mim",
+    "categorias": [
+      "item_faltando",
+      "entregador"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Uma sobremesa incluída no combo não foi entregue, e o entregador apresentou comportamento inadequado. A classificação considera ambos os relatos."
+  },
+  {
+    "id_externo": "ger-010",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "o caldo vazou por uma rachadura no pote e molhou tudo dentro da sacola. entrei em contato com a loja pra explicar e pedir mais cuidado na hora de embalar, mas quem me respondeu foi super seco e encerrou a conversa sem nem me ouvir. eu só queria avisar do problema, achei muito descaso",
+    "categorias": [
+      "embalagem",
+      "atendimento"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O pote rachado e o vazamento caracterizam problema de embalagem. A resposta inadequada da loja caracteriza, separadamente, problema de atendimento. Não há relato explícito de perda de qualidade da comida."
+  },
+  {
+    "id_externo": "ger-011",
+    "conjunto": "geral",
+    "nota": 3,
+    "texto": "quase morri de fome esperando esse pedido kkk chegou uns 40 minutos depois do prazo, pelo menos tava gostoso",
+    "categorias": [
+      "atraso"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata atraso de 40 minutos. 'Quase morri de fome' é uma expressão figurada de impaciência, não um relato concreto de problema de saúde."
+  },
+  {
+    "id_externo": "ger-012",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "17 reais de entrega pra vir de duas ruas daqui? sei que tava mostrando no app, mas achei salgado demais",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": true,
+    "justificativa": "Reclama do valor da taxa de entrega, mas reconhece que estava informado no aplicativo. Não há cobrança incorreta. Insatisfação com preço fica fora do escopo. 'Salgado' refere-se ao preço, não à comida."
+  },
+  {
+    "id_externo": "ger-013",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "me senti roubado nessa porção de purê, veio tão pouco que mal cobriu o fundo do pote",
+    "categorias": [
+      "qualidade_temperatura"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "'Me senti roubado' expressa insatisfação com a quantidade servida, não uma acusação concreta de cobrança indevida. Porção insuficiente pertence a qualidade_temperatura."
+  },
+  {
+    "id_externo": "ger-014",
+    "conjunto": "geral",
+    "nota": 5,
+    "texto": "chegou depois das 22h e o aplicativo marcava até 21h20. mesmo assim vou dar cinco estrelas porque o nhoque tava ótimo",
+    "categorias": [
+      "atraso"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O pedido chegou após o horário informado. O elogio à comida e a nota 5 não anulam o relato de atraso."
+  },
+  {
+    "id_externo": "ger-015",
+    "conjunto": "geral",
+    "nota": 1,
+    "texto": "esperei tanto pela entrega que perdi meu intervalo de almoço. o pedido só apareceu uma hora depois do previsto",
+    "categorias": [
+      "atraso"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata entrega uma hora além do previsto. Não há menção de conduta inadequada do entregador."
+  },
+  {
+    "id_externo": "ger-016",
+    "conjunto": "geral",
+    "nota": 3,
+    "texto": "escolhi água com gás e mandaram sem gás. era só acertar isso",
+    "categorias": [
+      "item_faltando"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Recebeu uma variante diferente da selecionada. Pela definição de item_faltando, erros de variante recebem esse rótulo."
+  },
+  {
+    "id_externo": "ger-017",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "o yakisoba veio sem o ovo extra que selecionei, só percebi quando fui comer",
+    "categorias": [
+      "item_faltando"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Um adicional solicitado não foi incluído no prato. É erro na composição pedida, sem reclamação de qualidade."
+  },
+  {
+    "id_externo": "ger-018",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "o risoto veio praticamente em temperatura ambiente, tive que esquentar na panela antes de comer",
+    "categorias": [
+      "qualidade_temperatura"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata temperatura inadequada para um prato normalmente servido quente. Não há menção a demora na entrega."
+  },
+  {
+    "id_externo": "ger-019",
+    "conjunto": "geral",
+    "nota": 4,
+    "texto": "o adesivo que fechava a sacola veio descolado, dava pra abrir sem romper nada. o pedido em si estava certinho",
+    "categorias": [
+      "embalagem"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O fechamento da sacola estava comprometido. Como os produtos chegaram corretamente, não há relato de item faltando."
+  },
+  {
+    "id_externo": "ger-020",
+    "conjunto": "geral",
+    "nota": 1,
+    "texto": "a previsão era 12h40 e fui receber quase 14h. quando liguei pra saber o que aconteceu, a atendente riu e disse que eu era apressado demais",
+    "categorias": [
+      "atraso",
+      "atendimento"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O pedido chegou depois da previsão (atraso) e a atendente tratou o cliente de maneira inadequada (atendimento). Não há evidência de que a atendente tenha causado o atraso."
+  },
+  {
+    "id_externo": "ger-021",
+    "conjunto": "geral",
+    "nota": 5,
+    "texto": "mandaram bem demais hoje, vou pedir de novo 👏",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Elogio sem reclamação. A ausência de problema resulta em zero categorias."
+  },
+  {
+    "id_externo": "ger-022",
+    "conjunto": "geral",
+    "nota": 5,
+    "texto": "pedimos moqueca pra dividir aqui em casa e todo mundo gostou. o pirão tava no ponto, o arroz bem soltinho e a quantidade deu tranquilo pra três pessoas. veio tudo bem acomodado nos potes e chegou dentro do horário. fazia tempo que não pedia uma comida tão caprichada pelo aplicativo",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Elogia preparo, porção, embalagem e pontualidade. Nenhum desses elementos é descrito como problemático."
+  },
+  {
+    "id_externo": "ger-023",
+    "conjunto": "geral",
+    "nota": 3,
+    "texto": "foi normal, tudo conforme esperado. nada de especial pra comentar",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Nota neutra, mas não há problema relatado. O conteúdo determina a classificação, não a nota."
+  },
+  {
+    "id_externo": "ger-024",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "tentei perguntar se tinham opção sem lactose e a pessoa da loja ficava me interrompendo toda hora, mal consegui terminar a pergunta",
+    "categorias": [
+      "atendimento"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata interrupções durante o atendimento prestado pela loja. A pergunta sobre lactose não constitui relato de alergia ou risco concreto."
+  },
+  {
+    "id_externo": "ger-025",
+    "conjunto": "geral",
+    "nota": 1,
+    "texto": "perguntei como funcionava o cancelamento e o atendente falou que se eu não sabia ler não podia fazer nada. achei muita falta de educação",
+    "categorias": [
+      "atendimento"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata tratamento desrespeitoso por parte do atendente. Responsável não identificado no texto; pela regra do guia, recebe atendimento. Não afirma que um pedido foi efetivamente cancelado."
+  },
+  {
+    "id_externo": "ger-026",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "o bobó veio aguado demais, parecia uma sopa. comentei com a loja e recebi um áudio debochando da minha reclamação",
+    "categorias": [
+      "qualidade_temperatura",
+      "atendimento"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Consistência inadequada do alimento (qualidade_temperatura) e resposta debochada da loja (atendimento)."
+  },
+  {
+    "id_externo": "ger-027",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "escolhi pudim de chocolate e mandaram o tradicional. pra piorar, o potinho tava trincado e vazou calda na sacola",
+    "categorias": [
+      "item_faltando",
+      "embalagem"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Variante diferente da solicitada (item_faltando) e pote danificado com vazamento (embalagem)."
+  },
+  {
+    "id_externo": "ger-028",
+    "conjunto": "geral",
+    "nota": 1,
+    "texto": "a gente tinha combinado a entrega antes do jogo começar, mas chegou mais de meia hora depois do horário. quando abrimos, vimos que esqueceram a batata que fazia parte do combo. o motoboy ainda me chamou de chato porque pedi um minuto pra conferir o pedido antes dele ir embora",
+    "categorias": [
+      "atraso",
+      "item_faltando",
+      "entregador"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Entrega após o horário combinado (atraso), ausência de item do combo (item_faltando) e ofensa do entregador (entregador). Não atribui a ele a causa do atraso nem do item ausente."
+  },
+  {
+    "id_externo": "ger-029",
+    "conjunto": "geral",
+    "nota": 5,
+    "texto": "esse sanduba é tão bom que quase tive um troço kkkkk nota mil, já quero outro",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "'Quase tive um troço' é uma expressão figurada de entusiasmo. Não existe relato concreto de mal-estar ou risco à saúde."
+  },
+  {
+    "id_externo": "ger-030",
+    "conjunto": "geral",
+    "nota": 3,
+    "texto": "a alça do saquinho de papel soltou assim que peguei o pedido, por pouco não foi tudo pro chão",
+    "categorias": [
+      "embalagem"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata falha na resistência da embalagem. A expressão 'por pouco' indica que os produtos quase caíram, não que houve perda ou dano à comida."
+  },
+  {
+    "id_externo": "ger-031",
+    "conjunto": "geral",
+    "nota": 5,
+    "texto": "tenho alergia a castanha e perguntei antes de comprar. a loja conferiu os ingredientes comigo e veio tudo certinho, gostei do cuidado",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "A cliente menciona uma alergia, mas relata que os ingredientes foram conferidos e o pedido veio correto. Não há exposição relatada a alérgeno, reação ou indício concreto de risco."
+  },
+  {
+    "id_externo": "ger-032",
+    "conjunto": "geral",
+    "nota": 5,
+    "texto": "a bebida veio numa garrafa de vidro, bem protegida e sem nenhuma trinca. chegou tudo em ordem",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "A garrafa de vidro chegou intacta e protegida. A presença de vidro, isoladamente, não caracteriza corpo estranho no alimento nem problema de embalagem."
+  },
+  {
+    "id_externo": "ger-033",
+    "conjunto": "geral",
+    "nota": 5,
+    "texto": "passei mal de rir com o desenho que fizeram no guardanapo kkkkk a comida tava ótima também",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "'Passei mal de rir' descreve uma reação ao desenho no guardanapo, não um problema de saúde associado ao consumo. O restante é positivo."
+  },
+  {
+    "id_externo": "ger-034",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "combinei de pegar o pedido na entrada da garagem, mas o motoboy deixou com o segurança do estacionamento do outro lado do prédio. não foi onde pedi",
+    "categorias": [
+      "entregador"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O entregador descumpriu o local de entrega explicitamente combinado. Não existe relato de atraso ou pedido não recebido."
+  },
+  {
+    "id_externo": "ger-035",
+    "conjunto": "geral",
+    "nota": 3,
+    "texto": "o entregador ficou buzinando sem parar e me apressando enquanto eu ainda tava pegando a sacola. achei bem desagradável",
+    "categorias": [
+      "entregador"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Buzinar insistentemente e apressar o cliente são comportamentos descritos como inadequados. Não há problema de tempo de entrega."
+  },
+  {
+    "id_externo": "ger-036",
+    "conjunto": "geral",
+    "nota": 1,
+    "texto": "a lasanha veio com a massa dura demais e o entregador ficou imitando meu jeito de falar quando abri a porta. experiência bem ruim",
+    "categorias": [
+      "qualidade_temperatura",
+      "entregador"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "A massa dura caracteriza problema de textura (qualidade_temperatura). Imitar o jeito de falar do cliente caracteriza conduta inadequada (entregador)."
+  },
+  {
+    "id_externo": "ger-037",
+    "conjunto": "geral",
+    "nota": 1,
+    "texto": "marquei dois molhos extras e só veio um. o pote da salada ainda tava rachado no fundo. quando avisei pelo chat, a loja disse que eu tava exagerando e encerrou a conversa",
+    "categorias": [
+      "item_faltando",
+      "embalagem",
+      "atendimento"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Um molho solicitado não veio (item_faltando), o pote estava rachado (embalagem) e a loja respondeu de maneira inadequada (atendimento). Três problemas independentes."
+  },
+  {
+    "id_externo": "ger-038",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "passou uns 35 minutos do prazo de entrega e o papel que envolvia o sanduíche veio todo rasgado, mal segurava o lanche",
+    "categorias": [
+      "atraso",
+      "embalagem"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O pedido chegou após a previsão (atraso) e a proteção de papel estava rasgada (embalagem). Não há relato de dano à comida."
+  },
+  {
+    "id_externo": "ger-039",
+    "conjunto": "geral",
+    "nota": 3,
+    "texto": "selecionei batata rústica no combo e mandaram batata palito. não era a opção que eu tinha escolhido",
+    "categorias": [
+      "item_faltando"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Foi entregue uma variante diferente da selecionada. Isso configura erro no pedido (item_faltando), não problema de qualidade."
+  },
+  {
+    "id_externo": "ger-040",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "a tapioca tava tão dura que parecia borracha, nem consegui terminar de comer",
+    "categorias": [
+      "qualidade_temperatura"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O cliente relata textura inadequada da tapioca (qualidade_temperatura). Não existe indício de risco à saúde."
+  },
+  {
+    "id_externo": "ger-041",
+    "conjunto": "geral",
+    "nota": 4,
+    "texto": "tomei um susto com duas notificações do pix, mas fui conferir no banco e só descontou uma vez, o valor certinho do pedido",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Duas notificações bancárias não significam duas cobranças. O cliente confirma um único débito com valor correto. Não existe cobrança indevida relatada."
+  },
+  {
+    "id_externo": "ger-042",
+    "conjunto": "geral",
+    "nota": 3,
+    "texto": "queria pedir alguma coisa sem carne pra minha irmã, mas o cardápio não tem uma opção vegetariana sequer. podiam variar um pouco",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": true,
+    "justificativa": "Reclama da ausência de opções vegetarianas no cardápio. Não descreve erro em um pedido, problema de preparo ou outra categoria prevista."
+  },
+  {
+    "id_externo": "ger-043",
+    "conjunto": "geral",
+    "nota": 4,
+    "texto": "o rapaz que trouxe o pedido foi super gente boa, até pediu desculpa. só que a entrega passou uns 30 minutos da previsão",
+    "categorias": [
+      "atraso"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata atraso explícito. O entregador é mencionado positivamente, sem conduta inadequada. Não recebe entregador."
+  },
+  {
+    "id_externo": "ger-044",
+    "conjunto": "geral",
+    "nota": 1,
+    "texto": "pedimos feijoada pro almoço e foi uma decepção. chegou mais de uma hora depois do horário, esqueceram a couve, o feijão tava aguado demais e a tampa da embalagem veio quebrada, vazando caldo na sacola",
+    "categorias": [
+      "atraso",
+      "item_faltando",
+      "qualidade_temperatura",
+      "embalagem"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata entrega após o horário previsto (atraso), ausência da couve que fazia parte da refeição (item_faltando), consistência inadequada do feijão (qualidade_temperatura) e tampa quebrada com vazamento (embalagem)."
+  },
+  {
+    "id_externo": "ger-045",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "o pedido chegou quase 45 minutos depois do combinado e ainda veio sem o molho de alho que eu tinha escolhido junto com as esfihas",
+    "categorias": [
+      "atraso",
+      "item_faltando"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "A entrega excedeu o prazo combinado (atraso) e um molho escolhido não foi enviado (item_faltando). Não presume relação entre os problemas."
+  },
+  {
+    "id_externo": "ger-046",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "pedi almoço pra comer no intervalo do trabalho, mas a entrega passou tanto da previsão que só consegui pegar quando já tinha voltado a trabalhar",
+    "categorias": [
+      "atraso"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O pedido ultrapassou a previsão de entrega e chegou após o intervalo de almoço. Não há evidência sobre a causa da demora."
+  },
+  {
+    "id_externo": "ger-047",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "fui retirar meu pedido no balcão e cada funcionário me mandava falar com outro. ninguém sabia me orientar onde eu devia pegar, atendimento confuso demais",
+    "categorias": [
+      "atendimento"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata falha na orientação prestada pelos funcionários durante a retirada. Não há informação suficiente para classificar atraso do pedido."
+  },
+  {
+    "id_externo": "ger-048",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "comprei a porção família de mandioca, mas entregaram a pequena. na etiqueta do pedido tava escrito família mesmo",
+    "categorias": [
+      "item_faltando"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "O tamanho entregue não corresponde ao tamanho comprado. Pela regra de variante ou tamanho errado, recebe item_faltando, não qualidade_temperatura."
+  },
+  {
+    "id_externo": "ger-049",
+    "conjunto": "geral",
+    "nota": 2,
+    "texto": "a polenta tava com umas partes duras e outras quase líquidas, parecia que nem tinham misturado direito. difícil comer assim",
+    "categorias": [
+      "qualidade_temperatura"
+    ],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "Relata textura e consistência inadequadas da polenta, caracterizando problema de preparo. Não afirma risco à saúde."
+  },
+  {
+    "id_externo": "ger-050",
+    "conjunto": "geral",
+    "nota": 3,
+    "texto": "colocaram o pote da sopa numa sacola de papel que ficou toda mole com a umidade. fiquei com medo de rasgar quando levantei, o pote tava intacto",
+    "categorias": [],
+    "criticidade": [],
+    "fora_do_escopo": false,
+    "justificativa": "A sacola ficou mole com a umidade, mas não há relato de rompimento, vazamento ou dano ao produto. O receio de rasgar não comprova uma falha. Conforme a regra existente do guia, não recebe categoria. Caso registrado em CASOS_AMBIGUOS.md."
+  }
+]

@@ -1,7 +1,10 @@
 # Guia de rotulação — Radar de Avaliações
 
 Dados simulados. Projeto independente, sem vínculo com o iFood.
-Este guia é congelado antes de rotular os conjuntos de avaliação.
+A versão 1.0 foi congelada antes de rotular os conjuntos de avaliação.
+Versão 1.1 (2026-10-28): acrescenta a regra de acúmulo entre `alergia` e `saude` (seção "Marcação
+crítica"), surgida ao rotular o crit-007. É uma definição de critério feita antes de qualquer execução
+do classificador, não um ajuste motivado por previsões.
 
 ## Princípio central
 
@@ -205,6 +208,10 @@ como "relato a verificar", nunca como fato comprovado.
 
 Regra: é crítica a avaliação que relata um possível evento ou risco grave concreto, sem exigir
 confirmação de que o restaurante o causou. Negação ou dúvida sem indício concreto não é crítica.
+
+Acúmulo (v1.1): reação alérgica relatada recebe somente `alergia`. A marcação `saude` só é acrescentada
+quando o mesmo texto relata outro evento de saúde sem natureza alérgica, como a presença de um objeto
+estranho no alimento.
 
 | Marcação | Inclui | Exclui |
 |---|---|---|
