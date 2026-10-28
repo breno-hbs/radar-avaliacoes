@@ -12,6 +12,7 @@ Oct 28, 2026 · @Breno
 
 - As avaliações são **sintéticas**, geradas por IA com problemas controlados. Nada vem do iFood.
 - **Não há integração** com sistemas do iFood. As ações do painel são registros internos e nenhuma resposta é publicada em lugar algum.
+- **Identidade:** o projeto não usa logotipo nem identidade visual oficial do iFood e não é apresentado como produto ou parceria dele. Menções factuais à plataforma são permitidas, sempre com a identificação "Projeto independente, sem vínculo com o iFood".
 - O "antes e depois" entre semanas prova o **mecanismo de medição**, não o efeito real de uma ação. Não prova causalidade.
 - Economia de horas é **estimativa de cenário**.
 - Diagnósticos são **hipóteses** com evidência, nunca certezas: a IA não conhece a operação do restaurante.
@@ -50,7 +51,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | --- | --- | --- | --- |
 | `POST /avaliacoes` | Simulador | Cabeçalho `X-API-Key` | Recebe `id_externo`, `texto`, `nota`, `recebida_em`. Valida, ignora duplicata, classifica e, se houver marcação crítica, cria o alerta |
 | `GET /resumo-semanal` | n8n | `X-API-Key` | Devolve período, total, negativas, 3 principais problemas, críticos, ações pendentes e o link do painel |
-| `GET /painel/{token}` | Dono (navegador) | Token assinado com validade | Serve a página mobile-first |
+| `GET /painel/{token}` | Dono (navegador) | Token com validade (tokens\_painel) | Serve a página mobile-first |
 | `GET /api/painel/{token}/cards` | Painel | Token | Cards com problema, evidências e recomendação |
 | `POST /api/painel/{token}/acoes` | Painel | Token | Registra uma ação |
 | `PATCH /api/painel/{token}/acoes/{id}` | Painel | Token | Muda o estado da ação |
@@ -58,8 +59,9 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Regras de segurança:**
 
-- O token é opaco, assinado e com prazo de validade; a URL não carrega dado sensível. Cada resumo semanal gera um link novo.
-- A chave `X-API-Key`, o token do bot e o segredo de assinatura ficam em variáveis de ambiente. Nunca entram no código nem no GitHub.
+- O token é aleatório (secrets.token\_urlsafe(32)) e só o seu hash SHA-256 é guardado na tabela tokens\_painel, com escopo do painel, validade inicial de 7 dias e possibilidade de revogação. A URL não carrega dado sensível. Cada resumo semanal gera um link novo.
+- O token na URL é uma credencial sensível: não aparece em logs, o acesso publicado usa HTTPS e as páginas enviam o cabeçalho `Referrer-Policy: no-referrer` para evitar vazamento pelo cabeçalho Referer.
+- A chave `X-API-Key` e o token do bot ficam em variáveis de ambiente. Nunca entram no código nem no GitHub.
 - Requisição sem chave, ou com link expirado, é recusada.
 
 **Tabelas (SQLite):**
@@ -69,10 +71,13 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | `avaliacoes` | `id`, `id_externo` (único), `texto`, `nota`, `recebida_em`, `prazo_resposta` (= recebida\_em + 5 dias), `categorias`, `criticidade`, `confianca` |
 | `alertas` | `id`, `avaliacao_id`, `tipo`, `estado`, `tentativas`, `criado_em`, `enviado_em`; único por (`avaliacao_id`, `tipo`) |
 | `acoes` | `id`, `categoria`, `semana_inicio`, `estado`, `criada_em`, `concluida_em`, `nota` |
+| tokens\_painel | id, token\_hash (único, SHA-256), escopo, criado\_em, expira\_em (= criado\_em + 7 dias), revogado\_em |
 
 **Estados:** alerta → `pendente`, `enviado` ou `falhou`. Ação → `pendente`, `em_andamento` ou `concluida`.
 
 **Ordem do alerta:** o FastAPI grava o alerta como `pendente` **antes** de chamar o Telegram, marca `enviado` ao confirmar e tenta de novo uma vez se falhar. A restrição de unicidade impede alerta repetido para a mesma avaliação. O histórico semanal é calculado das tabelas, sem tabela própria.
+
+**Decisão em aberto (Fase 2):** definir como cada ação registrada será vinculada às avaliações usadas como evidência, considerando uma tabela `acao_avaliacoes` ou estrutura equivalente. Não é necessário implementar isso na Fase 1.
 
 ## Regras de negócio
 
@@ -82,7 +87,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - **Conteúdo de um card:** o problema em uma linha, a quantidade e o período, até 3 trechos reais como evidência, a recomendação e o botão "registrar ação". O que não entra nos 3 cards fica um toque adiante, em "outros temas".
 - **Linha de cobertura fixa:** total de avaliações lidas, cards, temas monitorados sem ação e avaliações que a IA não soube classificar (baixa confiança).
 - **Sem presumir causa:** o texto diz "o padrão sugere" e recomenda investigar. Entregador nunca gera ação interna.
-- **Alerta crítico:** sai na hora em que a avaliação entra no endpoint, com o texto "relato a verificar", uma vez por ocorrência. Os casos críticos também contam no resumo semanal.
+- **Alerta crítico:** sai na hora em que a avaliação entra no endpoint, com o texto "relato a verificar", uma vez por ocorrência. Os casos críticos também contam no resumo semanal. O alerta pode ser enviado automaticamente ao dono, sempre como relato a verificar. Respostas públicas aos clientes nunca são enviadas automaticamente.
 - **Resumo semanal:** segunda-feira às 8h, no fuso America/Sao\_Paulo. Só é enviado se houver algo a decidir; um indicador "última leitura" no painel mostra que o sistema está vivo.
 - **Medição do efeito:** compara a taxa de menções por 100 avaliações entre semanas, antes e depois de uma ação concluída. É uma comparação simulada e não prova causalidade.
 - **Prazo de resposta:** cada avaliação guarda o prazo de 5 dias do iFood, para a versão futura de respostas em lote ([fonte](https://blog-parceiros.ifood.com.br/avaliacoes-e-moderacoes/)). Na v1, os rascunhos de resposta em lote são opcionais e o primeiro corte se houver atraso.
@@ -91,11 +96,16 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **A v1 só está pronta quando a classificação é medida e os oito critérios abaixo são comprovados.**
 
-**Conjuntos de avaliação (rotulados à mão):**
+**Conjuntos de dados (85 avaliações sintéticas, rotuladas à mão e separadas entre si):**
 
-- **50 avaliações gerais**, com casos de vários problemas por avaliação e avaliações positivas.
-- **15 casos críticos separados**, incluindo negativas e ambiguidades ("não passei mal", "achei estranho o gosto"), para medir falsos alertas e casos não detectados.
-- **Métricas:** F1 micro, F1 macro, F1 por categoria e, nos críticos, o recall como contagem (por exemplo, 14 de 15) mais os falsos alertas.
+- **20 avaliações de desenvolvimento**, usadas só para ajustar prompts, regras e exemplos few-shot. Nenhuma métrica final sai deste conjunto. Inclui alguns críticos e negativos difíceis, para ajustar o prompt nos dois casos.
+- **50 avaliações gerais**, com casos de vários problemas por avaliação, avaliações positivas e 8 a 10 negativos difíceis (negações e ambiguidades). Não contêm casos críticos verdadeiros.
+- **15 casos críticos separados**, só com relatos efetivamente críticos, cerca de 5 por marcação (saude, alergia, cobranca\_indevida), para medir os casos detectados e os não detectados.
+- **Métricas:** F1 micro, F1 macro e F1 por categoria nos 50 gerais. Nos 15 críticos: recall geral como contagem (por exemplo, 14 de 15) e recall por tipo (saúde, alergia, cobrança indevida). Nos 50 gerais: falsos alertas, isto é, avaliações não críticas marcadas como críticas.
+- **Regra de criticidade:** uma avaliação é crítica quando relata um possível evento ou risco grave concreto, sem exigir confirmação de que o restaurante o causou. "Comi e passei mal depois" e "Sou alérgico a amendoim e meu pedido veio com amendoim" são críticos. "Não passei mal, mas achei o gosto estranho" não é. A regra é escrita antes de rotular e vale para os três conjuntos. Um caso de alergia classificado como cobrança indevida não conta como acerto no recall por tipo.
+- **Separação:** os três conjuntos não têm avaliações duplicadas nem paráfrases quase idênticas entre si. Isso evita vazamento de dados (data leakage): ajustar o classificador com os mesmos exemplos usados para medi-lo.
+- **Diversidade obrigatória:** avaliações ambíguas, vários problemas na mesma avaliação, reclamações sem categoria aplicável e negações ("não tive nenhuma reação alérgica").
+- **Congelamento:** os 65 exemplos de avaliação só medem. O prompt é congelado antes de rodá-los, e versão do prompt, modelo e resultado são registrados. Se o prompt for ajustado depois de ver o resultado, as novas métricas são declaradas exploratórias ou exigem um novo conjunto de avaliação.
 
 **Ressalvas que vão para o README e para os posts:**
 
@@ -103,23 +113,33 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - Os 15 casos críticos são uma amostra enriquecida, não representam a frequência real.
 - Se a mesma IA gera os dados e classifica, a taxa de acerto sai inflada. Escreva parte dos exemplos à mão, varie o prompt de geração e declare isso.
 - O teste com 1 ou 2 pessoas é exploratório, não validação estatística de usabilidade.
+- As 85 avaliações demonstram o processo de avaliação do classificador, não comprovam desempenho com clientes reais. Essa limitação aparece no README e na apresentação.
 
 | # | Critério | Como comprovar | Fase |
 | --- | --- | --- | --- |
-| 1 | Classificação multirótulo | 50 avaliações rotuladas e métricas reportadas | 1 |
-| 2 | Casos críticos | 15 casos testados, com falsos negativos e falsos alertas contados | 1 |
+| 1 | Classificação multirótulo | Conjuntos separados (20 de desenvolvimento, 50 gerais) e métricas reportadas sobre os 50 | 1 |
+| 2 | Casos críticos | 15 casos críticos testados, com recall geral e por tipo; falsos alertas contados nos 50 gerais | 1 |
 | 3 | Sem duplicidade | Reenviar a mesma avaliação não gera outra avaliação nem outro alerta | 2 |
 | 4 | Segurança | Endpoint sem chave e link expirado são recusados | 2 |
 | 5 | Alerta imediato | Tempo medido entre a entrada no endpoint e a confirmação do Telegram | 3 |
 | 6 | Resumo semanal | Workflow do n8n executado manualmente, com histórico de execução | 3 |
 | 7 | Painel com persistência e histórico | Registrar ação, reiniciar o servidor e recuperar; consultar semanas anteriores | 4 |
-| 8 | Decisão em 2 minutos | Fluxo testado com 1 ou 2 pessoas, tempos registrados | 4 |
+| 8 | Decisão em 2 minutos | Teste dos 2 minutos, com o procedimento descrito abaixo da tabela | 4 |
+
+**Teste dos 2 minutos (critério 8):**
+
+- **Cenário:** uma semana sintética fixa, com 3 cards, igual para todos os testadores (1 ou 2 pessoas).
+- **Início:** o testador abre o link e a primeira tela termina de carregar.
+- **Decisão por card:** registrar uma ação ou dizer em voz alta que não fará nada. O observador anota a decisão verbal, não o sistema, porque a v1 não tem botão para dispensar uma recomendação.
+- **Fim:** a decisão do último card.
+- **Sucesso:** os 3 cards decididos em até 120 segundos, sem ajuda do observador. O tempo real e as hesitações são registrados mesmo se o teste falhar.
+- **O que mede:** o tempo de decisão. Não afirma que todas as decisões foram persistidas no painel. É um teste exploratório, não validação estatística.
 
 **Cronograma de 3 semanas** (datas previstas, partindo de 29/10/2026; se o seu tempo de estudo for menor, as datas andam e o escopo não muda):
 
 | Semana | Fases | Resultado verificável |
 | --- | --- | --- |
-| 1 (29/10 a 04/11) | 0 e 1: fundamentos, dataset sintético, rotulação, primeira classificação | Dataset 50 + 15 rotulado e métricas iniciais |
+| 1 (29/10 a 04/11) | 0 e 1: fundamentos, dataset sintético de 85 avaliações, rotulação, ajuste com o conjunto de desenvolvimento e primeira avaliação | Dataset de 85 avaliações rotulado (20 de desenvolvimento, 50 gerais e 15 críticas), prompt congelado e métricas iniciais |
 | 2 (05/11 a 11/11) | 2 e 3: FastAPI, SQLite, endpoint seguro, alertas críticos, n8n | Alerta com tempo medido e workflow executado |
 | 3 (12/11 a 18/11) | 4: painel, ações persistidas, histórico, teste de 2 minutos, demonstração | Vídeo de 2 minutos, link do app e README |
 
@@ -158,7 +178,7 @@ Do portfólio esperado: **ferramenta publicada** (painel no ar), **dashboard fun
 | Risco | Resposta |
 | --- | --- |
 | Aprender n8n, Telegram e a ferramenta de vibe coding do zero | Uma coisa nova por fase, e o n8n só na Semana 2 |
-| Classificação inflada por dados gerados pela mesma IA | Parte dos exemplos escrita à mão e prompts de geração variados, declarado no README |
+| Classificação inflada por dados gerados pela mesma IA | Parte dos exemplos escrita à mão e prompts de geração variados e conjuntos de desenvolvimento e avaliação separados, declarado no README |
 | Muito escopo para 3 semanas | Ordem de corte definida; testes e persistência não saem |
 | Tempo de estudo menor que o previsto | As datas andam, o escopo não; as horas por dia ainda precisam ser definidas |
 | Vazar chave ou segredo no repositório público | `.env` fora do Git e uma busca no histórico antes de publicar |
