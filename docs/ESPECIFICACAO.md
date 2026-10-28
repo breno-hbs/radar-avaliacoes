@@ -26,7 +26,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 ## Categorias e criticidade
 
-**Cada avaliação recebe zero ou mais categorias e, separadamente, zero ou mais marcações críticas.** A criticidade não compete com as categorias: uma reação alérgica pode ser "qualidade e temperatura" e ainda ter a marcação de risco à saúde. A classificação considera o conteúdo da avaliação, independentemente da nota atribuída. Avaliações sem relato de problema recebem zero categorias. Avaliações com nota alta que mencionem explicitamente um problema recebem os rótulos correspondentes.
+**Cada avaliação recebe zero ou mais categorias e, separadamente, zero ou mais marcações críticas.** A criticidade é independente das categorias operacionais. Uma reação alérgica relatada recebe `alergia` como marcação crítica, conforme o Guia de Rotulação v1.1. A marcação `saude` só é acrescentada quando o mesmo texto relata outro evento de saúde sem natureza alérgica. Categorias operacionais são atribuídas somente quando o texto relata problemas correspondentes. As regras de rotulação estão em `docs/GUIA_ROTULACAO.md`, versão 1.1. A classificação considera o conteúdo da avaliação, independentemente da nota atribuída. Avaliações sem relato de problema recebem zero categorias. Avaliações com nota alta que mencionem explicitamente um problema recebem os rótulos correspondentes.
 
 | Categoria | O que cobre | Ação recomendada no card | O restaurante controla? |
 | --- | --- | --- | --- |
@@ -42,6 +42,8 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 **Fora das marcações:** ofensa e discriminação. O blog de parceiros do iFood informa que comentários ofensivos são descartados antes de chegar à loja ([fonte](https://blog-parceiros.ifood.com.br/avaliacoes-e-moderacoes/)), então o dono provavelmente nunca os veria.
 
 **Decisão em aberto para depois da avaliação:** `qualidade_temperatura` fica junta na v1. Se a matriz de erros da Fase 1 mostrar confusão com `atraso` e `embalagem`, ou se o dono precisar de ações diferentes, a categoria é dividida.
+
+**Decisão em aberto, Fase 2:** definir quantos alertas críticos devem ser enviados quando uma avaliação recebe múltiplas marcações. Padrão sugerido: um alerta por avaliação, listando os tipos identificados. Decisão pendente para a Fase 2.
 
 ## Contratos e dados
 
@@ -102,7 +104,8 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - **50 avaliações gerais**, com casos de vários problemas por avaliação, avaliações positivas e 8 a 10 negativos difíceis (negações e ambiguidades). Não contêm casos críticos verdadeiros.
 - **15 casos críticos separados**, só com relatos efetivamente críticos, cerca de 5 por marcação (saude, alergia, cobranca\_indevida), para medir os casos detectados e os não detectados.
 - **Métricas:** F1 micro, F1 macro e F1 por categoria nos 50 gerais. Nos 15 críticos: recall geral como contagem (por exemplo, 14 de 15) e recall por tipo (saúde, alergia, cobrança indevida). Nos 50 gerais: falsos alertas, isto é, avaliações não críticas marcadas como críticas.
-- **Regra de criticidade:** uma avaliação é crítica quando relata um possível evento ou risco grave concreto, sem exigir confirmação de que o restaurante o causou. "Comi e passei mal depois" e "Sou alérgico a amendoim e meu pedido veio com amendoim" são críticos. "Não passei mal, mas achei o gosto estranho" não é. A regra é escrita antes de rotular e vale para os três conjuntos. Um caso de alergia classificado como cobrança indevida não conta como acerto no recall por tipo.
+- **Contagem das marcações críticas:** uma marcação crítica correta conta como verdadeiro positivo daquele tipo, e uma marcação adicional incorreta conta como falso positivo daquele tipo. O recall geral mede quantas das 15 avaliações críticas foram identificadas como críticas, com qualquer marcação. "Falso alerta por avaliação" significa uma avaliação não crítica marcada como crítica. Exemplo: gabarito `["alergia"]` e previsão `["alergia", "saude"]` dão acerto de `alergia`, falso positivo de `saude`, avaliação crítica detectada e nenhum falso alerta por avaliação. Falsos positivos por marcação crítica são reportados junto ao recall por tipo.
+- **Regra de criticidade:** uma avaliação é crítica quando relata um possível evento ou risco grave concreto, sem exigir confirmação de que o restaurante o causou. "Comi e passei mal depois" e "Sou alérgico a amendoim e meu pedido veio com amendoim" são críticos. "Não passei mal, mas achei o gosto estranho" não é. A regra vale para os três conjuntos. O Guia de Rotulação foi refinado durante a rotulação, na versão 1.1, em 2026-10-28 (regra de acúmulo entre `alergia` e `saude`, surgida ao rotular o `crit-007`), antes de qualquer execução do classificador. Um caso de alergia classificado como cobrança indevida não conta como acerto no recall por tipo.
 - **Separação:** os três conjuntos não têm avaliações duplicadas nem paráfrases quase idênticas entre si. Isso evita vazamento de dados (data leakage): ajustar o classificador com os mesmos exemplos usados para medi-lo.
 - **Diversidade obrigatória:** avaliações ambíguas, vários problemas na mesma avaliação, reclamações sem categoria aplicável e negações ("não tive nenhuma reação alérgica").
 - **Congelamento:** os 65 exemplos de avaliação só medem. O prompt é congelado antes de rodá-los, e versão do prompt, modelo e resultado são registrados. Se o prompt for ajustado depois de ver o resultado, as novas métricas são declaradas exploratórias ou exigem um novo conjunto de avaliação.
@@ -110,6 +113,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 **Ressalvas que vão para o README e para os posts:**
 
 - 50 avaliações avaliam o protótipo; não garantem desempenho em produção.
+- O conjunto crítico não é totalmente independente da definição dos critérios: o caso `crit-007` motivou a regra de acúmulo da versão 1.1 do guia (2026-10-28), antes de qualquer execução do classificador e sem relação com previsões do modelo. Essa limitação deve ser declarada na própria publicação que apresentar o recall dos 15 críticos, junto às ressalvas de amostra pequena e rotulador único.
 - Os 15 casos críticos são uma amostra enriquecida, não representam a frequência real.
 - Se a mesma IA gera os dados e classifica, a taxa de acerto sai inflada. Escreva parte dos exemplos à mão, varie o prompt de geração e declare isso.
 - O teste com 1 ou 2 pessoas é exploratório, não validação estatística de usabilidade.

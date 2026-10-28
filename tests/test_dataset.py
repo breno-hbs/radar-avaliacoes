@@ -3,6 +3,8 @@
 Dados simulados. Projeto independente, sem vínculo com o iFood.
 """
 import json
+import re
+import unicodedata
 from collections import Counter
 from pathlib import Path
 
@@ -38,6 +40,14 @@ def carregar(conjunto):
     arquivo, _ = CONJUNTOS[conjunto]
     with open(DATA / arquivo, encoding="utf-8") as f:
         return json.load(f)
+
+
+def normalizar(texto):
+    """Normalização básica: minúsculas, sem acentos nem pontuação, espaços colapsados."""
+    sem_acento = "".join(
+        c for c in unicodedata.normalize("NFD", texto) if not unicodedata.combining(c)
+    )
+    return re.sub(r"[\W_]+", " ", sem_acento.lower()).strip()
 
 
 @pytest.fixture(scope="module")
@@ -110,3 +120,43 @@ def test_geral_nao_tem_criticidade(dados):
 def test_critico_tem_5_por_marcacao(dados, marcacao):
     quantidade = sum(1 for a in dados["critico"] if marcacao in a["criticidade"])
     assert quantidade == CRITICOS_POR_MARCACAO
+
+
+def test_todo_critico_tem_ao_menos_uma_marcacao_valida(dados):
+    sem_marcacao = [
+        a["id_externo"]
+        for a in dados["critico"]
+        if not (set(a["criticidade"]) & CRITICIDADES)
+    ]
+    assert sem_marcacao == []
+
+
+@pytest.mark.parametrize("campo", ["texto", "justificativa"])
+def test_texto_e_justificativa_nao_vazios(todas, campo):
+    vazios = [
+        a["id_externo"]
+        for a in todas
+        if not isinstance(a[campo], str) or not a[campo].strip()
+    ]
+    assert vazios == []
+
+
+def test_sem_textos_identicos_entre_conjuntos(todas):
+    contagem = Counter(normalizar(a["texto"]) for a in todas)
+    repetidos = sorted(
+        a["id_externo"] for a in todas if contagem[normalizar(a["texto"])] > 1
+    )
+    assert repetidos == []
+
+
+@pytest.mark.parametrize("campo", ["categorias", "criticidade"])
+def test_listas_sem_valores_repetidos(todas, campo):
+    repetidas = [a["id_externo"] for a in todas if len(a[campo]) != len(set(a[campo]))]
+    assert repetidas == []
+
+
+def test_crit_007_somente_alergia(dados):
+    # Protege uma decisão do gabarito (guia v1.1, regra de acúmulo). Não é uma regra
+    # universal: alergia e saude podem coexistir quando há outro evento de saúde não alérgico.
+    crit_007 = next(a for a in dados["critico"] if a["id_externo"] == "crit-007")
+    assert crit_007["criticidade"] == ["alergia"]
