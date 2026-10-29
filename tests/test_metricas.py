@@ -255,6 +255,30 @@ def test_recall_gabarito_vazio_nao_e_caso_critico():
         recall_criticos([["saude"], []], [["saude"], []])
 
 
+def test_recall_entrada_vazia_levanta_erro():
+    with pytest.raises(ValueError):
+        recall_criticos([], [])
+
+
+def test_f1_e_falsos_alertas_aceitam_entrada_vazia():
+    assert f1_categorias([], [])["macro_f1"] is None
+    assert falsos_alertas([], [])["total_nao_criticas"] == 0
+
+
+@pytest.mark.parametrize("funcao", FUNCOES)
+def test_rotulo_repetido_no_gabarito_levanta_erro(funcao):
+    bom = ROTULO_BOM[funcao]
+    with pytest.raises(ValueError):
+        funcao([[bom, bom]], [[bom]])
+
+
+@pytest.mark.parametrize("funcao", FUNCOES)
+def test_rotulo_repetido_na_previsao_levanta_erro(funcao):
+    bom = ROTULO_BOM[funcao]
+    with pytest.raises(ValueError):
+        funcao([[bom]], [[bom, bom]])
+
+
 def test_falsos_alertas_aceita_gabarito_vazio():
     # No conjunto geral o gabarito de criticidade é vazio; não pode virar erro.
     assert falsos_alertas([[]], [[]])["total_nao_criticas"] == 1

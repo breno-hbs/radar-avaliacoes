@@ -14,6 +14,8 @@ def _validar_rotulos(nome, rotulos, permitidos):
             raise ValueError(f"{nome} contém rótulo que não é texto")
         if rotulo not in permitidos:
             raise ValueError(f"{nome} contém rótulo fora do conjunto: {rotulo!r}")
+    if len(set(rotulos)) != len(rotulos):
+        raise ValueError(f"{nome} contém rótulo repetido")
 
 
 def _validar_entrada(gabaritos, previsoes, permitidos):
@@ -85,6 +87,8 @@ def f1_categorias(gabaritos, previsoes):
 def recall_criticos(gabaritos, previsoes):
     """Recall geral (contagem) e por tipo, com falsos positivos por tipo."""
     _validar_entrada(gabaritos, previsoes, CRITICIDADES)
+    if not gabaritos:
+        raise ValueError("sem avaliações críticas para medir")
     if any(not gab for gab in gabaritos):
         raise ValueError("gabarito sem marcação não é um caso crítico")
     por_tipo = {t: {"acertos": 0, "total": 0, "falsos_positivos": 0} for t in CRITICIDADES}
