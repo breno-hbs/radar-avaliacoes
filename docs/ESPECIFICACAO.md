@@ -98,7 +98,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **A v1 só está pronta quando a classificação é medida e os oito critérios abaixo são comprovados.**
 
-**Conjuntos de dados (85 avaliações sintéticas, rotuladas à mão e separadas entre si):**
+**Conjuntos de dados (85 avaliações sintéticas, criadas com apoio de IA, com classificações revisadas manualmente por uma única pessoa e separadas entre si):**
 
 - **20 avaliações de desenvolvimento**, usadas só para ajustar prompts, regras e exemplos few-shot. Nenhuma métrica final sai deste conjunto. Inclui alguns críticos e negativos difíceis, para ajustar o prompt nos dois casos.
 - **50 avaliações gerais**, com casos de vários problemas por avaliação, avaliações positivas e 8 a 10 negativos difíceis (negações e ambiguidades). Não contêm casos críticos verdadeiros.
