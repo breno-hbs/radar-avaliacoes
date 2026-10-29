@@ -98,7 +98,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **A v1 só está pronta quando a classificação é medida e os oito critérios abaixo são comprovados.**
 
-**Conjuntos de dados (85 avaliações sintéticas, rotuladas à mão e separadas entre si):**
+**Conjuntos de dados (85 avaliações sintéticas, criadas com apoio de IA, com classificações revisadas manualmente por uma única pessoa e separadas entre si):**
 
 - **20 avaliações de desenvolvimento**, usadas só para ajustar prompts, regras e exemplos few-shot. Nenhuma métrica final sai deste conjunto. Inclui alguns críticos e negativos difíceis, para ajustar o prompt nos dois casos.
 - **50 avaliações gerais**, com casos de vários problemas por avaliação, avaliações positivas e 8 a 10 negativos difíceis (negações e ambiguidades). Não contêm casos críticos verdadeiros.
@@ -115,7 +115,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - 50 avaliações avaliam o protótipo; não garantem desempenho em produção.
 - O conjunto crítico não é totalmente independente da definição dos critérios: o caso `crit-007` motivou a regra de acúmulo da versão 1.1 do guia (2026-10-28), antes de qualquer execução do classificador e sem relação com previsões do modelo. Essa limitação deve ser declarada na própria publicação que apresentar o recall dos 15 críticos, junto às ressalvas de amostra pequena e rotulador único.
 - Os 15 casos críticos são uma amostra enriquecida, não representam a frequência real.
-- Se a mesma IA gera os dados e classifica, a taxa de acerto sai inflada. Escreva parte dos exemplos à mão, varie o prompt de geração e declare isso.
+- Se a mesma IA, ou uma parecida, gera os dados e classifica, a taxa de acerto pode sair inflada. Na v1, as 85 avaliações foram criadas com apoio de IA e nenhuma foi escrita à mão; esse risco fica declarado como limitação aberta. Uma avaliação futura deve usar exemplos escritos à mão ou de outra fonte.
 - O teste com 1 ou 2 pessoas é exploratório, não validação estatística de usabilidade.
 - As 85 avaliações demonstram o processo de avaliação do classificador, não comprovam desempenho com clientes reais. Essa limitação aparece no README e na apresentação.
 
@@ -182,7 +182,7 @@ Do portfólio esperado: **ferramenta publicada** (painel no ar), **dashboard fun
 | Risco | Resposta |
 | --- | --- |
 | Aprender n8n, Telegram e a ferramenta de vibe coding do zero | Uma coisa nova por fase, e o n8n só na Semana 2 |
-| Classificação inflada por dados gerados pela mesma IA | Parte dos exemplos escrita à mão e prompts de geração variados e conjuntos de desenvolvimento e avaliação separados, declarado no README |
+| Classificação inflada por dados gerados pela mesma IA | Risco declarado como limitação aberta no README. Conjuntos de desenvolvimento e de avaliação separados. Avaliação futura com exemplos escritos à mão ou de outra fonte |
 | Muito escopo para 3 semanas | Ordem de corte definida; testes e persistência não saem |
 | Tempo de estudo menor que o previsto | As datas andam, o escopo não; as horas por dia ainda precisam ser definidas |
 | Vazar chave ou segredo no repositório público | `.env` fora do Git e uma busca no histórico antes de publicar |
