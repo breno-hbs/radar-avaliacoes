@@ -1,0 +1,92 @@
+{
+  "avaliacao": "Nota 2. Pedi uma lasagem e um refrigerante. O pedido chegou mais de uma hora depois do horário combinado, a lasagem veio fria e o refrigerante não veio na sacola. O entregador foi educado.",
+  "prompt_vago": "O que você acha desta avaliação de restaurante? Seja breve.\n\nAvaliação: Nota 2. Pedi uma lasagem e um refrigerante. O pedido chegou mais de uma hora depois do horário combinado, a lasagem veio fria e o refrigerante não veio na sacola. O entregador foi educado.",
+  "prompt_claro": "Liste os problemas relatados nesta avaliação de restaurante. Use somente estas categorias: atraso, item_faltando, qualidade_temperatura, embalagem, atendimento, entregador. Formato: uma linha por problema, no padrão 'categoria: motivo em poucas palavras'. No máximo 5 linhas, sem texto antes ou depois. Se não houver problema, escreva 'nenhum'.\n\nAvaliação: Nota 2. Pedi uma lasagem e um refrigerante. O pedido chegou mais de uma hora depois do horário combinado, a lasagem veio fria e o refrigerante não veio na sacola. O entregador foi educado.",
+  "chamadas": [
+    {
+      "rotulo": "exp3-vaga",
+      "data_hora_utc": "2026-10-29T03:46:07.742189+00:00",
+      "provedor": "Anthropic",
+      "modelo": "claude-sonnet-5-5",
+      "parametros": {
+        "max_retries": 0,
+        "max_tokens": 400,
+        "thinking": {
+          "type": "between_tools"
+        },
+        "output_config": {
+          "effort": "medium"
+        },
+        "temperature": "omitido",
+        "top_p": "omitido",
+        "top_k": "omitido"
+      },
+      "mensagens_enviadas": [
+        {
+          "role": "user",
+          "content": "O que você acha desta avaliação de restaurante? Seja breve.\n\nAvaliação: Nota 2. Pedi uma lasagem e um refrigerante. O pedido chegou mais de uma hora depois do horário combinado, a lasagem veio fria e o refrigerante não veio na sacola. O entregador foi educado."
+        }
+      ],
+      "request_id": "req_011CgVqsBMHcVdBXYswD7qQX",
+      "stop_reason": "end_turn",
+      "tipos_de_bloco": [
+        "text"
+      ],
+      "apareceu_bloco_de_pensamento": false,
+      "blocos_de_texto": [
+        "Avaliação clara e justa. Ela traz os três problemas concretos (atraso de mais de uma hora, comida fria, item faltando) e ainda reconhece o ponto positivo (entregador educado), o que dá credibilidade.\n\nUm detalhe: atraso e item faltante costumam ser falha da operação de entrega ou da embalagem, não necessariamente da cozinha, então vale deixar claro o que foi culpa do restaurante. Mesmo assim, para quem lê, ela é útil e equilibrada."
+      ],
+      "texto": "Avaliação clara e justa. Ela traz os três problemas concretos (atraso de mais de uma hora, comida fria, item faltando) e ainda reconhece o ponto positivo (entregador educado), o que dá credibilidade.\n\nUm detalhe: atraso e item faltante costumam ser falha da operação de entrega ou da embalagem, não necessariamente da cozinha, então vale deixar claro o que foi culpa do restaurante. Mesmo assim, para quem lê, ela é útil e equilibrada.",
+      "tokens": {
+        "entrada": 116,
+        "saida": 178
+      },
+      "valido": true
+    },
+    {
+      "rotulo": "exp3-clara",
+      "data_hora_utc": "2026-10-29T03:46:09.766762+00:00",
+      "provedor": "Anthropic",
+      "modelo": "claude-sonnet-5-5",
+      "parametros": {
+        "max_retries": 0,
+        "max_tokens": 400,
+        "thinking": {
+          "type": "between_tools"
+        },
+        "output_config": {
+          "effort": "medium"
+        },
+        "temperature": "omitido",
+        "top_p": "omitido",
+        "top_k": "omitido"
+      },
+      "mensagens_enviadas": [
+        {
+          "role": "user",
+          "content": "Liste os problemas relatados nesta avaliação de restaurante. Use somente estas categorias: atraso, item_faltando, qualidade_temperatura, embalagem, atendimento, entregador. Formato: uma linha por problema, no padrão 'categoria: motivo em poucas palavras'. No máximo 5 linhas, sem texto antes ou depois. Se não houver problema, escreva 'nenhum'.\n\nAvaliação: Nota 2. Pedi uma lasagem e um refrigerante. O pedido chegou mais de uma hora depois do horário combinado, a lasagem veio fria e o refrigerante não veio na sacola. O entregador foi educado."
+        }
+      ],
+      "request_id": "req_011CgVqsKq2KECySbg2xHVqs",
+      "stop_reason": "end_turn",
+      "tipos_de_bloco": [
+        "text"
+      ],
+      "apareceu_bloco_de_pensamento": false,
+      "blocos_de_texto": [
+        "atraso: chegou mais de uma hora depois do combinado\nqualidade_temperatura: lasagem chegou fria\nitem_faltando: refrigerante não veio na sacola"
+      ],
+      "texto": "atraso: chegou mais de uma hora depois do combinado\nqualidade_temperatura: lasagem chegou fria\nitem_faltando: refrigerante não veio na sacola",
+      "tokens": {
+        "entrada": 235,
+        "saida": 61
+      },
+      "valido": true
+    }
+  ],
+  "formato_prompt_claro": {
+    "linhas_nao_vazias": 3,
+    "ate_5_linhas": true,
+    "todas_no_padrao_categoria_dois_pontos_motivo": true
+  }
+}

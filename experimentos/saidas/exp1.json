@@ -1,0 +1,126 @@
+{
+  "pergunta": "Em até duas frases curtas: por que um restaurante deve ler as avaliações dos clientes toda semana?",
+  "chamadas": [
+    {
+      "rotulo": "exp1-chamada-1",
+      "data_hora_utc": "2026-10-29T03:45:55.599046+00:00",
+      "provedor": "Anthropic",
+      "modelo": "claude-sonnet-5-5",
+      "parametros": {
+        "max_retries": 0,
+        "max_tokens": 400,
+        "thinking": {
+          "type": "between_tools"
+        },
+        "output_config": {
+          "effort": "medium"
+        },
+        "temperature": "omitido",
+        "top_p": "omitido",
+        "top_k": "omitido"
+      },
+      "mensagens_enviadas": [
+        {
+          "role": "user",
+          "content": "Em até duas frases curtas: por que um restaurante deve ler as avaliações dos clientes toda semana?"
+        }
+      ],
+      "request_id": "req_011CgVqrHqBi2akKxSsmY4A4",
+      "stop_reason": "end_turn",
+      "tipos_de_bloco": [
+        "text"
+      ],
+      "apareceu_bloco_de_pensamento": false,
+      "blocos_de_texto": [
+        "Ler as avaliações toda semana permite identificar rapidamente problemas recorrentes, como demora no atendimento ou falhas na comida, e corrigi-los antes que afastem mais clientes. Também mostra o que os clientes mais valorizam, ajudando a reforçar os pontos fortes e a decidir melhor sobre cardápio e serviço."
+      ],
+      "texto": "Ler as avaliações toda semana permite identificar rapidamente problemas recorrentes, como demora no atendimento ou falhas na comida, e corrigi-los antes que afastem mais clientes. Também mostra o que os clientes mais valorizam, ajudando a reforçar os pontos fortes e a decidir melhor sobre cardápio e serviço.",
+      "tokens": {
+        "entrada": 43,
+        "saida": 123
+      },
+      "valido": true
+    },
+    {
+      "rotulo": "exp1-chamada-2",
+      "data_hora_utc": "2026-10-29T03:45:58.401473+00:00",
+      "provedor": "Anthropic",
+      "modelo": "claude-sonnet-5-5",
+      "parametros": {
+        "max_retries": 0,
+        "max_tokens": 400,
+        "thinking": {
+          "type": "between_tools"
+        },
+        "output_config": {
+          "effort": "medium"
+        },
+        "temperature": "omitido",
+        "top_p": "omitido",
+        "top_k": "omitido"
+      },
+      "mensagens_enviadas": [
+        {
+          "role": "user",
+          "content": "Em até duas frases curtas: por que um restaurante deve ler as avaliações dos clientes toda semana?"
+        }
+      ],
+      "request_id": "req_011CgVqrVEHpTNRufMdFMrAt",
+      "stop_reason": "end_turn",
+      "tipos_de_bloco": [
+        "text"
+      ],
+      "apareceu_bloco_de_pensamento": false,
+      "blocos_de_texto": [
+        "Ler as avaliações semanalmente permite identificar rapidamente problemas recorrentes, como demora no atendimento ou falhas na cozinha, e corrigi-los antes que afastem mais clientes. Também mostra o que o público mais valoriza, ajudando a reforçar os pontos fortes e a responder com agilidade, o que melhora a reputação do restaurante."
+      ],
+      "texto": "Ler as avaliações semanalmente permite identificar rapidamente problemas recorrentes, como demora no atendimento ou falhas na cozinha, e corrigi-los antes que afastem mais clientes. Também mostra o que o público mais valoriza, ajudando a reforçar os pontos fortes e a responder com agilidade, o que melhora a reputação do restaurante.",
+      "tokens": {
+        "entrada": 43,
+        "saida": 129
+      },
+      "valido": true
+    },
+    {
+      "rotulo": "exp1-chamada-3",
+      "data_hora_utc": "2026-10-29T03:46:00.909136+00:00",
+      "provedor": "Anthropic",
+      "modelo": "claude-sonnet-5-5",
+      "parametros": {
+        "max_retries": 0,
+        "max_tokens": 400,
+        "thinking": {
+          "type": "between_tools"
+        },
+        "output_config": {
+          "effort": "medium"
+        },
+        "temperature": "omitido",
+        "top_p": "omitido",
+        "top_k": "omitido"
+      },
+      "mensagens_enviadas": [
+        {
+          "role": "user",
+          "content": "Em até duas frases curtas: por que um restaurante deve ler as avaliações dos clientes toda semana?"
+        }
+      ],
+      "request_id": "req_011CgVqrfxhnujKvap7F3wSp",
+      "stop_reason": "end_turn",
+      "tipos_de_bloco": [
+        "text"
+      ],
+      "apareceu_bloco_de_pensamento": false,
+      "blocos_de_texto": [
+        "Ler as avaliações toda semana permite identificar problemas de atendimento, comida ou higiene antes que se repitam e afastem clientes. Também mostra o que está agradando, ajudando a manter os acertos e a responder rapidamente, o que fortalece a reputação."
+      ],
+      "texto": "Ler as avaliações toda semana permite identificar problemas de atendimento, comida ou higiene antes que se repitam e afastem clientes. Também mostra o que está agradando, ajudando a manter os acertos e a responder rapidamente, o que fortalece a reputação.",
+      "tokens": {
+        "entrada": 43,
+        "saida": 94
+      },
+      "valido": true
+    }
+  ],
+  "textos_distintos_comparacao_exata": 3
+}
