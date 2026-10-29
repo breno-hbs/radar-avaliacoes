@@ -35,7 +35,8 @@ def main():
         # A API de mensagens não guarda estado entre chamadas; nenhuma sessão, thread,
         # previous_response_id, objeto de chat ou identificador de contexto é usado.
         msgs2 = [{"role": "user", "content": PERGUNTA}]
-        assert NOME_FICTICIO not in json.dumps(msgs2, ensure_ascii=False)
+        if NOME_FICTICIO in json.dumps(msgs2, ensure_ascii=False):
+            sys.exit("o nome vazou para a chamada sem histórico")
         r2 = comum.chamar(cliente, "exp2-2-sem-historico", msgs2)
         registros.append(r2)
 
