@@ -1,8 +1,8 @@
 # Resultados dos experimentos do Post 1
 
 Dados fictícios. Projeto independente, sem vínculo com o iFood.
-Este arquivo registra só observações, limitações, configuração e erros. Não contém
-interpretação, gancho nem roteiro. Respostas completas e metadados: `experimentos/saidas/*.json`.
+Este arquivo registra observações e limitações, além de configuração e erros. Não contém
+gancho nem roteiro. Respostas completas e metadados: `experimentos/saidas/*.json`.
 
 ## Configuração usada (as 8 chamadas)
 
@@ -138,8 +138,8 @@ descritivas: a resposta ao vago tem dois parágrafos; a resposta ao claro tem tr
   2. **Formato:** o claro exige uma linha por problema no padrão `categoria: motivo`; o vago não pede formato.
   3. **Limite de linhas:** o claro limita a 5 linhas e proíbe texto antes ou depois; o vago só pede "seja breve".
   4. Além dessas três, a **tarefa pedida também é diferente**: o vago pergunta o que se acha da avaliação (um julgamento sobre a avaliação), o claro pede a lista de problemas relatados. Por isso as duas respostas não respondem exatamente à mesma pergunta, e o experimento não isola qual dessas diferenças pesa.
-- O gabarito do experimento 3 foi escrito por mim (assistente) antes da execução, a partir das
-  categorias do projeto; a avaliação sintética também foi escrita por mim, com os problemas
+- O gabarito do experimento 3 foi escrito pelo assistente (Claude) antes da execução, a partir das
+  categorias do projeto; a avaliação sintética também foi escrita pelo assistente (Claude), com os problemas
   inseridos de forma explícita. É um caso fácil, sem ambiguidade.
 - Os tokens de saída informados pela API podem incluir raciocínio interno não devolvido
   como bloco; as respostas tiveram só blocos `text`, e este registro não permite distinguir.

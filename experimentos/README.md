@@ -61,7 +61,7 @@ São 3 chamadas, portanto exploratório.
 > horário combinado, a lasagem veio fria e o refrigerante não veio na sacola.
 > O entregador foi educado.
 
-### Gabarito (definido antes de rodar, independente dos dois prompts)
+### Gabarito (escrito antes da execução)
 
 Categorias do projeto (`docs/GUIA_ROTULACAO.md` v1.1). Problemas existentes na avaliação:
 
@@ -86,12 +86,14 @@ palavra-chave.
 
 ### Obediência ao formato (observação à parte)
 
-Só se aplica ao prompt claro, o único que pede formato. Verificações objetivas, automáticas
-em `exp3_vaga_x_clara.py`:
+Só se aplica ao prompt claro, o único que pede formato. Há 2 verificações objetivas,
+automáticas, em `exp3_vaga_x_clara.py`:
 
 - no máximo 5 linhas não vazias;
-- toda linha no padrão `categoria: motivo`, com a categoria entre as seis do projeto;
-- nenhum texto antes ou depois da lista.
+- toda linha no padrão `categoria: motivo`, com a categoria entre as seis do projeto.
+
+A terceira exigência do prompt, nenhum texto antes ou depois da lista, decorre da segunda:
+se toda linha não vazia está no padrão, não há texto extra.
 
 A resposta ao prompt vago não é avaliada quanto a formato, porque nenhum foi pedido.
 Formato e identificação dos problemas são reportados separadamente.
@@ -113,4 +115,6 @@ python experimentos/rodar_tudo.py
 ```
 
 Ou um por vez: `python experimentos/exp1_mesma_pergunta.py` (idem `exp2_contexto.py` e
-`exp3_vaga_x_clara.py`). As respostas completas ficam em `experimentos/saidas/*.json`.
+`exp3_vaga_x_clara.py`). Após uma falha parcial, rode os scripts um a um, porque o
+`rodar_tudo.py` para no primeiro experimento que já tem saída. As respostas completas ficam em
+`experimentos/saidas/*.json`.
