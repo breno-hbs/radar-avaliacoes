@@ -1,0 +1,135 @@
+{
+  "nome_ficticio": "Cantina Lua de Papel",
+  "chamadas": [
+    {
+      "rotulo": "exp2-1-informa",
+      "data_hora_utc": "2026-10-29T03:46:02.878279+00:00",
+      "provedor": "Anthropic",
+      "modelo": "claude-sonnet-5-5",
+      "parametros": {
+        "max_retries": 0,
+        "max_tokens": 400,
+        "thinking": {
+          "type": "between_tools"
+        },
+        "output_config": {
+          "effort": "medium"
+        },
+        "temperature": "omitido",
+        "top_p": "omitido",
+        "top_k": "omitido"
+      },
+      "mensagens_enviadas": [
+        {
+          "role": "user",
+          "content": "O nome (fictício) do meu restaurante é Cantina Lua de Papel. Responda só com uma frase curta confirmando."
+        }
+      ],
+      "request_id": "req_011CgVqrpUfgTDi6xJt7dk6N",
+      "stop_reason": "end_turn",
+      "tipos_de_bloco": [
+        "text"
+      ],
+      "apareceu_bloco_de_pensamento": false,
+      "blocos_de_texto": [
+        "Anotado: seu restaurante se chama Cantina Lua de Papel."
+      ],
+      "texto": "Anotado: seu restaurante se chama Cantina Lua de Papel.",
+      "tokens": {
+        "entrada": 50,
+        "saida": 28
+      },
+      "valido": true
+    },
+    {
+      "rotulo": "exp2-2-sem-historico",
+      "data_hora_utc": "2026-10-29T03:46:04.245055+00:00",
+      "provedor": "Anthropic",
+      "modelo": "claude-sonnet-5-5",
+      "parametros": {
+        "max_retries": 0,
+        "max_tokens": 400,
+        "thinking": {
+          "type": "between_tools"
+        },
+        "output_config": {
+          "effort": "medium"
+        },
+        "temperature": "omitido",
+        "top_p": "omitido",
+        "top_k": "omitido"
+      },
+      "mensagens_enviadas": [
+        {
+          "role": "user",
+          "content": "Qual é o nome do meu restaurante? Responda em uma frase curta."
+        }
+      ],
+      "request_id": "req_011CgVqrvDTR1hnrBnTGBonv",
+      "stop_reason": "end_turn",
+      "tipos_de_bloco": [
+        "text"
+      ],
+      "apareceu_bloco_de_pensamento": false,
+      "blocos_de_texto": [
+        "Não sei o nome do seu restaurante, pois você ainda não me contou — qual é?"
+      ],
+      "texto": "Não sei o nome do seu restaurante, pois você ainda não me contou — qual é?",
+      "tokens": {
+        "entrada": 32,
+        "saida": 32
+      },
+      "valido": true
+    },
+    {
+      "rotulo": "exp2-3-com-historico",
+      "data_hora_utc": "2026-10-29T03:46:06.242979+00:00",
+      "provedor": "Anthropic",
+      "modelo": "claude-sonnet-5-5",
+      "parametros": {
+        "max_retries": 0,
+        "max_tokens": 400,
+        "thinking": {
+          "type": "between_tools"
+        },
+        "output_config": {
+          "effort": "medium"
+        },
+        "temperature": "omitido",
+        "top_p": "omitido",
+        "top_k": "omitido"
+      },
+      "mensagens_enviadas": [
+        {
+          "role": "user",
+          "content": "O nome (fictício) do meu restaurante é Cantina Lua de Papel. Responda só com uma frase curta confirmando."
+        },
+        {
+          "role": "assistant",
+          "content": "Anotado: seu restaurante se chama Cantina Lua de Papel."
+        },
+        {
+          "role": "user",
+          "content": "Qual é o nome do meu restaurante? Responda em uma frase curta."
+        }
+      ],
+      "request_id": "req_011CgVqs4m9izwqdbgNvXD46",
+      "stop_reason": "end_turn",
+      "tipos_de_bloco": [
+        "text"
+      ],
+      "apareceu_bloco_de_pensamento": false,
+      "blocos_de_texto": [
+        "O nome do seu restaurante é Cantina Lua de Papel."
+      ],
+      "texto": "O nome do seu restaurante é Cantina Lua de Papel.",
+      "tokens": {
+        "entrada": 108,
+        "saida": 25
+      },
+      "valido": true
+    }
+  ],
+  "sem_historico_citou_o_nome": false,
+  "com_historico_citou_o_nome": true
+}
