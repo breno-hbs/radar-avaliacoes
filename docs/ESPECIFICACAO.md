@@ -77,13 +77,13 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Estados:** alerta → `pendente`, `enviado` ou `falhou`. Ação → `pendente`, `em_andamento` ou `concluida`.
 
-**Ordem do alerta:** o FastAPI grava o alerta como `pendente` **antes** de chamar o Telegram, marca `enviado` ao confirmar e tenta de novo uma vez se falhar; se a nova tentativa também falhar, o estado fica `falhou`. O campo `tentativas` registra as tentativas de envio. A mensagem é única por avaliação e lista todos os tipos identificados, sempre como "relato a verificar". O histórico semanal é calculado das tabelas, sem tabela própria.
+**Ordem do alerta:** o FastAPI grava o alerta como `pendente` **antes** de chamar o Telegram, marca `enviado` ao confirmar e tenta de novo uma vez se falhar; se a nova tentativa também falhar, o estado fica `falhou`. O campo `tentativas` registra as tentativas de envio. A mensagem é única por avaliação e lista todos os tipos identificados, sempre como "relato a verificar". A avaliação e o alerta `pendente` são gravados na mesma transação: se um não for gravado, nenhum dos dois é, e o reenvio da avaliação volta a ser processado. O histórico semanal é calculado das tabelas, sem tabela própria.
 
 **Limite da unicidade:** a restrição única do banco impede um segundo registro de alerta para a mesma avaliação, mas não garante que o Telegram receba uma só mensagem. Se a mensagem for entregue e a confirmação do Telegram se perder (por exemplo, por tempo esgotado), a nova tentativa a envia de novo. Essa entrega duplicada pode ocorrer excepcionalmente. A v1 não garante entrega exatamente uma vez.
 
 **Prioridade:** não perder um alerta crítico. Um alerta `falhou` continua registrado no banco, e o caso também aparece no resumo semanal. Como garantir que um alerta `pendente` ou `falhou` seja entregue é a decisão em aberto abaixo.
 
-**Decisão em aberto (Fase 2):** definir a recuperação de alertas `pendente` após o reinício do servidor e o tratamento dos alertas `falhou` (reenvio automático, reenvio manual ou apenas o registro). Registrar o alerta no banco e mostrá-lo no resumo semanal não equivale a garantir aviso imediato ao dono: um alerta `pendente` ou `falhou` pode ficar sem ser entregue até o próximo resumo.
+**Decisão em aberto (Fase 2):** definir a recuperação de alertas `pendente` após o reinício do servidor e o tratamento dos alertas `falhou` (reenvio automático, reenvio manual ou apenas o registro). Registrar o alerta no banco e mostrá-lo no resumo semanal não equivale a garantir aviso imediato ao dono: um alerta `pendente` ou `falhou` pode ficar sem ser entregue até o próximo resumo. Definir também se o resumo semanal mostra o estado do alerta (`pendente`, `enviado` ou `falhou`), já que o contrato de `GET /resumo-semanal` não o inclui.
 
 **Decisão em aberto (Fase 2):** definir como cada ação registrada será vinculada às avaliações usadas como evidência, considerando uma tabela `acao_avaliacoes` ou estrutura equivalente. Não é necessário implementar isso na Fase 1.
 
