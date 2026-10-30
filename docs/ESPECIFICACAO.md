@@ -43,7 +43,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Decisão em aberto para depois da avaliação:** `qualidade_temperatura` fica junta na v1. Se a matriz de erros da Fase 1 mostrar confusão com `atraso` e `embalagem`, ou se o dono precisar de ações diferentes, a categoria é dividida.
 
-**Decisão em aberto, Fase 2:** definir quantos alertas críticos devem ser enviados quando uma avaliação recebe múltiplas marcações. Padrão sugerido: um alerta por avaliação, listando os tipos identificados. Decisão pendente para a Fase 2.
+**Decisão tomada (30/10/2026), Fase 2:** uma avaliação com várias marcações críticas gera **um único alerta**, que lista todos os tipos identificados. O critério: a unidade do alerta é o que o dono precisa verificar, e ele verifica uma avaliação, não um tipo de marcação.
 
 ## Contratos e dados
 
@@ -51,7 +51,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 | Rota | Quem chama | Autenticação | O que faz |
 | --- | --- | --- | --- |
-| `POST /avaliacoes` | Simulador | Cabeçalho `X-API-Key` | Recebe `id_externo`, `texto`, `nota`, `recebida_em`. Valida, ignora duplicata, classifica e, se houver marcação crítica, cria o alerta |
+| `POST /avaliacoes` | Simulador | Cabeçalho `X-API-Key` | Recebe `id_externo`, `texto`, `nota`, `recebida_em`. Valida, ignora duplicata, classifica e, se houver marcação crítica, cria um único alerta com todos os tipos identificados |
 | `GET /resumo-semanal` | n8n | `X-API-Key` | Devolve período, total, negativas, 3 principais problemas, críticos, ações pendentes e o link do painel |
 | `GET /painel/{token}` | Dono (navegador) | Token com validade (tokens\_painel) | Serve a página mobile-first |
 | `GET /api/painel/{token}/cards` | Painel | Token | Cards com problema, evidências e recomendação |
@@ -71,13 +71,19 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | Tabela | Campos principais |
 | --- | --- |
 | `avaliacoes` | `id`, `id_externo` (único), `texto`, `nota`, `recebida_em`, `prazo_resposta` (= recebida\_em + 5 dias), `categorias`, `criticidade`, `confianca` |
-| `alertas` | `id`, `avaliacao_id`, `tipo`, `estado`, `tentativas`, `criado_em`, `enviado_em`; único por (`avaliacao_id`, `tipo`) |
+| `alertas` | `id`, `avaliacao_id`, `tipos`, `estado`, `tentativas`, `criado_em`, `enviado_em`; único por `avaliacao_id`. `tipos` é a lista de todas as marcações críticas da avaliação |
 | `acoes` | `id`, `categoria`, `semana_inicio`, `estado`, `criada_em`, `concluida_em`, `nota` |
 | tokens\_painel | id, token\_hash (único, SHA-256), escopo, criado\_em, expira\_em (= criado\_em + 7 dias), revogado\_em |
 
 **Estados:** alerta → `pendente`, `enviado` ou `falhou`. Ação → `pendente`, `em_andamento` ou `concluida`.
 
-**Ordem do alerta:** o FastAPI grava o alerta como `pendente` **antes** de chamar o Telegram, marca `enviado` ao confirmar e tenta de novo uma vez se falhar. A restrição de unicidade impede alerta repetido para a mesma avaliação. O histórico semanal é calculado das tabelas, sem tabela própria.
+**Ordem do alerta:** o FastAPI grava o alerta como `pendente` **antes** de chamar o Telegram, marca `enviado` ao confirmar e tenta de novo uma vez se falhar; se a nova tentativa também falhar, o estado fica `falhou`. O campo `tentativas` registra as tentativas de envio. A mensagem é única por avaliação e lista todos os tipos identificados, sempre como "relato a verificar". O histórico semanal é calculado das tabelas, sem tabela própria.
+
+**Limite da unicidade:** a restrição única do banco impede um segundo registro de alerta para a mesma avaliação, mas não garante que o Telegram receba uma só mensagem. Se a mensagem for entregue e a confirmação do Telegram se perder (por exemplo, por tempo esgotado), a nova tentativa a envia de novo. Essa entrega duplicada pode ocorrer excepcionalmente. A v1 não garante entrega exatamente uma vez.
+
+**Prioridade:** não perder um alerta crítico. Um alerta `falhou` continua registrado no banco, e o caso também aparece no resumo semanal. Como garantir que um alerta `pendente` ou `falhou` seja entregue é a decisão em aberto abaixo.
+
+**Decisão em aberto (Fase 2):** definir a recuperação de alertas `pendente` após o reinício do servidor e o tratamento dos alertas `falhou` (reenvio automático, reenvio manual ou apenas o registro). Registrar o alerta no banco e mostrá-lo no resumo semanal não equivale a garantir aviso imediato ao dono: um alerta `pendente` ou `falhou` pode ficar sem ser entregue até o próximo resumo.
 
 **Decisão em aberto (Fase 2):** definir como cada ação registrada será vinculada às avaliações usadas como evidência, considerando uma tabela `acao_avaliacoes` ou estrutura equivalente. Não é necessário implementar isso na Fase 1.
 
@@ -89,7 +95,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - **Conteúdo de um card:** o problema em uma linha, a quantidade e o período, até 3 trechos reais como evidência, a recomendação e o botão "registrar ação". O que não entra nos 3 cards fica um toque adiante, em "outros temas".
 - **Linha de cobertura fixa:** total de avaliações lidas, cards, temas monitorados sem ação e avaliações que a IA não soube classificar (baixa confiança).
 - **Sem presumir causa:** o texto diz "o padrão sugere" e recomenda investigar. Entregador nunca gera ação interna.
-- **Alerta crítico:** sai na hora em que a avaliação entra no endpoint, com o texto "relato a verificar", uma vez por ocorrência. Os casos críticos também contam no resumo semanal. O alerta pode ser enviado automaticamente ao dono, sempre como relato a verificar. Respostas públicas aos clientes nunca são enviadas automaticamente.
+- **Alerta crítico:** sai na hora em que a avaliação entra no endpoint, com o texto "relato a verificar", em uma mensagem por avaliação que lista todos os tipos identificados. Os casos críticos também contam no resumo semanal. O alerta pode ser enviado automaticamente ao dono, sempre como relato a verificar. Respostas públicas aos clientes nunca são enviadas automaticamente.
 - **Resumo semanal:** segunda-feira às 8h, no fuso America/Sao\_Paulo. Só é enviado se houver algo a decidir; um indicador "última leitura" no painel mostra que o sistema está vivo.
 - **Medição do efeito:** compara a taxa de menções por 100 avaliações entre semanas, antes e depois de uma ação concluída. É uma comparação simulada e não prova causalidade.
 - **Prazo de resposta:** cada avaliação guarda o prazo de 5 dias do iFood, para a versão futura de respostas em lote ([fonte](https://blog-parceiros.ifood.com.br/avaliacoes-e-moderacoes/)). Na v1, os rascunhos de resposta em lote são opcionais e o primeiro corte se houver atraso.
