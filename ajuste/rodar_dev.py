@@ -16,7 +16,13 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.classificador import PARAMETROS, carregar_prompt, classificar, criar_cliente
+from app.classificador import (
+    PARAMETROS,
+    ErroPermanenteDaAPI,
+    carregar_prompt,
+    classificar,
+    criar_cliente,
+)
 
 RAIZ = Path(__file__).resolve().parent.parent
 NOME_DEV = "desenvolvimento.json"
@@ -113,7 +119,11 @@ def main(argv=None):
                  "(novas chamadas pagas).")
 
     cliente = criar_cliente()
-    rodadas = rodar(avaliacoes, cliente, prompt, rodadas=args.rodadas)
+    try:
+        rodadas = rodar(avaliacoes, cliente, prompt, rodadas=args.rodadas)
+    except ErroPermanenteDaAPI as e:
+        # Aborta a execução inteira: nada é gravado, nem como saída inválida.
+        sys.exit(f"Execução abortada, nada foi gravado: {e}")
 
     RELATORIOS.mkdir(exist_ok=True)
     for caminho, rodada in zip(brutos, rodadas):

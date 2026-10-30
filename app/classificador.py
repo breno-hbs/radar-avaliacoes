@@ -2,17 +2,21 @@
 
 Dados simulados. Projeto independente, sem vínculo com o iFood.
 
-REGRA DE RETENTATIVA (fixa; vale para o ajuste e para a avaliação):
-- Erro técnico é:
-  (a) exceção anthropic.APIError (inclui tempo esgotado, falha de conexão e status HTTP);
+REGRA DE RETENTATIVA (regra de retentativa vigente; vale para o ajuste e para a avaliação):
+- Erro técnico REPETÍVEL é:
+  (a) exceção anthropic.APIError sem resposta HTTP (tempo esgotado, falha de conexão) ou com
+      status HTTP 408, 409, 429 ou 5xx;
   (b) stop_reason "max_tokens" ou "refusal";
   (c) resposta sem nenhum bloco do tipo "text";
   (d) texto que não é JSON (json.loads falha);
   (e) JSON fora do contrato (contrato.SaidaInvalida: categoria inventada, chave extra,
       item repetido etc.).
-- Em erro técnico, há até 2 NOVAS tentativas (MAX_TENTATIVAS = 3 chamadas no total),
+- Em erro repetível, há até 2 NOVAS tentativas (MAX_TENTATIVAS = 3 chamadas no total),
   com exatamente os mesmos argumentos. Nada é alterado entre as tentativas.
 - Esgotadas as 3, a saída é None (conta como saída inválida nas métricas).
+- Qualquer OUTRO status HTTP (400, 401, 403, 404, 422...) é erro permanente: NÃO é repetido e
+  levanta ErroPermanenteDaAPI, que aborta a rodada inteira. O chamador não deve gravar
+  resultados parciais nem tratá-los como saídas inválidas.
 - Não há troca de modelo nem fallback em caso de recusa.
 - Qualquer outra exceção (erro de programação) sobe sem nova tentativa.
 - O SDK é criado com max_retries=0: as únicas novas tentativas são as daqui.
@@ -22,6 +26,7 @@ conforme o caso. Nunca a mensagem da exceção, cabeçalhos ou o texto bruto da 
 
 O modelo recebe só o texto da avaliação (nada de nota, id, gabarito ou justificativa).
 """
+import hashlib
 import json
 import os
 import re
@@ -37,6 +42,25 @@ RAIZ = Path(__file__).resolve().parent.parent
 PASTA_PROMPTS = RAIZ / "prompts" / "classificador"
 
 MAX_TENTATIVAS = 3
+STATUS_REPETIVEIS = (408, 409, 429)  # além de qualquer 5xx
+
+
+class ErroPermanenteDaAPI(Exception):
+    """Status HTTP que repetir não resolve (chave inválida, pedido malformado, modelo inexistente).
+
+    Carrega só o status e o request_id; nunca a mensagem nem o corpo do erro da API.
+    """
+
+    def __init__(self, status, request_id):
+        super().__init__(f"erro permanente da API (status {status}, request_id {request_id})")
+        self.status = status
+        self.request_id = request_id
+
+
+def _repetivel(e):
+    if isinstance(e, anthropic.APIStatusError):
+        return e.status_code in STATUS_REPETIVEIS or e.status_code >= 500
+    return True  # tempo esgotado e falha de conexão
 
 SCHEMA = {
     "type": "object",
@@ -75,6 +99,16 @@ def carregar_prompt(versao):
     if not isinstance(versao, str) or not _VERSAO_VALIDA.fullmatch(versao):
         raise ValueError("versão do prompt deve ter a forma v0, v1, v2...")
     return (PASTA_PROMPTS / f"{versao}.md").read_text(encoding="utf-8")
+
+
+def sha256_do_prompt(versao):
+    """SHA-256 (hex) do texto do prompt tal como carregar_prompt o devolve (UTF-8, quebras LF).
+
+    Não depende de o arquivo ter CRLF no disco (Windows): carregar_prompt já lê com quebras
+    universais, e o texto enviado à API é esse. Ainda não é usado em nenhum fluxo (uso na fase 4.3).
+    """
+    texto = carregar_prompt(versao).replace(chr(13) + chr(10), chr(10))
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()
 
 
 def criar_cliente():
@@ -144,11 +178,17 @@ def classificar(texto, cliente, prompt):
     erros = []
     usos = []
     for tentativa in range(1, MAX_TENTATIVAS + 1):
+        permanente = None
         try:
             resposta = cliente.messages.create(**argumentos)
         except anthropic.APIError as e:
-            erros.append(_erro_de_excecao(tentativa, e))
-            continue
+            if _repetivel(e):
+                erros.append(_erro_de_excecao(tentativa, e))
+                continue
+            permanente = (e.status_code, e.request_id)
+        if permanente is not None:
+            # Fora do except: a exceção não herda __context__ com a mensagem e o corpo originais.
+            raise ErroPermanenteDaAPI(*permanente)
         usos.append(_uso(tentativa, resposta))
         saida, tipo = _interpretar(resposta)
         if saida is not None:
