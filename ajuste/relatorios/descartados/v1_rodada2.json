@@ -1,0 +1,508 @@
+{
+  "aviso": "DESCARTADO: não é a v1 oficial",
+  "rodada": 2,
+  "itens": [
+    {
+      "id": "dev-001",
+      "texto": "o lanche tava muito bom, mas demorou uma eternidade pra chegar aqui",
+      "gabarito": {
+        "categorias": [
+          "atraso"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "atraso"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3661,
+          "output_tokens": 22
+        }
+      ]
+    },
+    {
+      "id": "dev-002",
+      "texto": "pedi dois x-burguer e só mandaram um, aí fica difícil né",
+      "gabarito": {
+        "categorias": [
+          "item_faltando"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "item_faltando"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3657,
+          "output_tokens": 24
+        }
+      ]
+    },
+    {
+      "id": "dev-003",
+      "texto": "a batata tava toda murcha e encharcada de óleo, não curti",
+      "gabarito": {
+        "categorias": [
+          "qualidade_temperatura"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "qualidade_temperatura"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3654,
+          "output_tokens": 28
+        }
+      ]
+    },
+    {
+      "id": "dev-004",
+      "texto": "a tampa do copo veio solta e derramou refri dentro da sacola",
+      "gabarito": {
+        "categorias": [
+          "embalagem"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "embalagem"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3655,
+          "output_tokens": 23
+        }
+      ]
+    },
+    {
+      "id": "dev-005",
+      "texto": "mandei mensagem pra loja umas três vezes e ninguém me respondeu",
+      "gabarito": {
+        "categorias": [
+          "atendimento"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "atendimento"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3658,
+          "output_tokens": 23
+        }
+      ]
+    },
+    {
+      "id": "dev-006",
+      "texto": "o motoboy foi muito grosso comigo, ficou falando aos gritos sem necessidade",
+      "gabarito": {
+        "categorias": [
+          "entregador"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "entregador"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3663,
+          "output_tokens": 22
+        }
+      ]
+    },
+    {
+      "id": "dev-007",
+      "texto": "pedi o macarrão sem bacon e veio cheio, aí fui falar com a loja e me deixaram no vácuo no chat",
+      "gabarito": {
+        "categorias": [
+          "item_faltando",
+          "atendimento"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "item_faltando",
+          "atendimento"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3675,
+          "output_tokens": 30
+        }
+      ]
+    },
+    {
+      "id": "dev-008",
+      "texto": "pedi um yakisoba, chegou quase 50 min depois da previsão e tava gelado. pra completar, a sacola veio rasgada",
+      "gabarito": {
+        "categorias": [
+          "atraso",
+          "qualidade_temperatura",
+          "embalagem"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "atraso",
+          "qualidade_temperatura",
+          "embalagem"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3678,
+          "output_tokens": 39
+        }
+      ]
+    },
+    {
+      "id": "dev-009",
+      "texto": "a janta chegou quase 1h depois do previsto, a tampa da marmita tava aberta e o motoboy largou na portaria sem avisar, sendo que pedi pra entregar na mão",
+      "gabarito": {
+        "categorias": [
+          "atraso",
+          "embalagem",
+          "entregador"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "atraso",
+          "embalagem",
+          "entregador"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3695,
+          "output_tokens": 33
+        }
+      ]
+    },
+    {
+      "id": "dev-010",
+      "texto": "mandaram minha pizza com a borda errada, a massa tava toda borrachuda e quando reclamei a pessoa da loja me respondeu com grosseria",
+      "gabarito": {
+        "categorias": [
+          "item_faltando",
+          "qualidade_temperatura",
+          "atendimento"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "item_faltando",
+          "qualidade_temperatura",
+          "atendimento"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3684,
+          "output_tokens": 41
+        }
+      ]
+    },
+    {
+      "id": "dev-011",
+      "texto": "comida sensacional, tempero perfeito e porção generosa! só a tampa da marmita que veio meio solta, podia fechar melhor. mas merecem 5 estrelas",
+      "gabarito": {
+        "categorias": [
+          "embalagem"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "embalagem"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3690,
+          "output_tokens": 23
+        }
+      ]
+    },
+    {
+      "id": "dev-012",
+      "texto": "tudo certinho, gostei 👍",
+      "gabarito": {
+        "categorias": [],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3644,
+          "output_tokens": 17
+        }
+      ]
+    },
+    {
+      "id": "dev-013",
+      "texto": "pedi almoço pra mim e pra minha mãe e adoramos! veio tudo bem servido, os acompanhamentos estavam certinhos, comida quentinha e saborosa. o entregador foi super educado também. com certeza vamos pedir de novo",
+      "gabarito": {
+        "categorias": [],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3717,
+          "output_tokens": 17
+        }
+      ]
+    },
+    {
+      "id": "dev-014",
+      "texto": "comi a marmita no almoço e umas horas depois comecei a passar mal, fiquei com um enjoo muito forte",
+      "gabarito": {
+        "categorias": [],
+        "criticidade": [
+          "saude"
+        ]
+      },
+      "previsao": {
+        "categorias": [],
+        "criticidade": [
+          "saude"
+        ]
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3671,
+          "output_tokens": 22
+        }
+      ]
+    },
+    {
+      "id": "dev-015",
+      "texto": "pedi o açaí sem amendoim pq sou alérgica, mas chegou com amendoim por cima. ainda bem que vi antes de comer",
+      "gabarito": {
+        "categorias": [
+          "item_faltando"
+        ],
+        "criticidade": [
+          "alergia"
+        ]
+      },
+      "previsao": {
+        "categorias": [
+          "item_faltando"
+        ],
+        "criticidade": [
+          "alergia"
+        ]
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3680,
+          "output_tokens": 30
+        }
+      ]
+    },
+    {
+      "id": "dev-016",
+      "texto": "passaram meu cartão duas vezes pelo mesmo pedido, fui olhar no extrato e tinha duas cobranças iguais",
+      "gabarito": {
+        "categorias": [],
+        "criticidade": [
+          "cobranca_indevida"
+        ]
+      },
+      "previsao": {
+        "categorias": [],
+        "criticidade": [
+          "cobranca_indevida"
+        ]
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3677,
+          "output_tokens": 28
+        }
+      ]
+    },
+    {
+      "id": "dev-017",
+      "texto": "não tive reação alérgica nem nada, mas pedi meu lanche sem cebola e mandaram com cebola",
+      "gabarito": {
+        "categorias": [
+          "item_faltando"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "item_faltando"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3669,
+          "output_tokens": 24
+        }
+      ]
+    },
+    {
+      "id": "dev-018",
+      "texto": "o frango tava com um gosto esquisito, mas não passei mal nem nada. não curti",
+      "gabarito": {
+        "categorias": [
+          "qualidade_temperatura"
+        ],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [
+          "qualidade_temperatura"
+        ],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3661,
+          "output_tokens": 28
+        }
+      ]
+    },
+    {
+      "id": "dev-019",
+      "texto": "o combo custou o que tava no cardápio mesmo, mas achei caro demais pelo que oferecem",
+      "gabarito": {
+        "categorias": [],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3666,
+          "output_tokens": 17
+        }
+      ]
+    },
+    {
+      "id": "dev-020",
+      "texto": "o suporte do aplicativo fica encerrando meu chamado sem resolver nada, já tentei falar com eles umas três vezes",
+      "gabarito": {
+        "categorias": [],
+        "criticidade": []
+      },
+      "previsao": {
+        "categorias": [],
+        "criticidade": []
+      },
+      "tentativas": 1,
+      "erros": [],
+      "usos": [
+        {
+          "tentativa": 1,
+          "input_tokens": 3675,
+          "output_tokens": 17
+        }
+      ]
+    }
+  ]
+}
