@@ -1,6 +1,78 @@
 # radar-avaliacoes
 Assistente que transforma avaliações de restaurante em até 3 ações por semana. Dados simulados. Projeto independente, sem vínculo com o iFood.
 
+## Resultado da avaliação oficial da v1
+
+Avaliação do classificador (prompt v1 congelado) sobre as 85 avaliações fictícias do projeto, em 3
+rodadas completas. **Não é prova de desempenho real:** veja as ressalvas abaixo, que valem para
+qualquer número desta seção.
+
+- **Quando e o quê:** 2026-10-30, `claude-sonnet-5-5`, no commit da tag
+  [`classificador-v1-congelado`](https://github.com/breno-hbs/radar-avaliacoes/tree/classificador-v1-congelado).
+  O prompt, o schema, os parâmetros, a regra de retentativa e os dados foram conferidos por hash
+  antes da execução ([registro de congelamento](prompts/classificador/v1.congelamento.md)). Foram 195
+  chamadas (65 avaliações × 3 rodadas), sem retentativas. A avaliação oficial foi executada uma vez
+  (0 execuções abortadas).
+- **Como se mediu:** o protocolo foi escrito antes de qualquer número e reporta as três rodadas e a
+  média, sem escolher a melhor ([protocolo](docs/AVALIACAO_PROTOCOLO.md)). O relatório completo
+  está em [`avaliacao/resultados/v1/relatorio.md`](avaliacao/resultados/v1/relatorio.md).
+- **A v1 foi escolhida por fidelidade ao Guia de Rotulação v1.1, não por métrica:** ela empatou com
+  a v0 nos 20 exemplos de desenvolvimento.
+
+### 50 avaliações gerais
+
+| | Rodada 1 | Rodada 2 | Rodada 3 | Média |
+|---|---|---|---|---|
+| F1 micro | 1,000 | 1,000 | 1,000 | 1,000 |
+| F1 macro | 1,000 | 1,000 | 1,000 | 1,000 |
+
+F1 por categoria (média das 3 rodadas): `atraso` 1,000; `item_faltando` 1,000;
+`qualidade_temperatura` 1,000; `embalagem` 1,000; `atendimento` 1,000; `entregador` 1,000.
+
+Falsos alertas (avaliação não crítica marcada como crítica): **0 de 50 em cada rodada**; saídas
+inválidas nas 3 rodadas e nos 65 itens: **0 de 195**.
+
+### 15 avaliações críticas
+
+| | Rodada 1 | Rodada 2 | Rodada 3 | Média |
+|---|---|---|---|---|
+| Recall geral (detectadas) | 15 de 15 | 15 de 15 | 15 de 15 | 15,00 de 15 |
+| `saude` | 5 de 5 | 5 de 5 | 5 de 5 | 5,00 de 5 |
+| `alergia` | 5 de 5 | 5 de 5 | 5 de 5 | 5,00 de 5 |
+| `cobranca_indevida` | 5 de 5 | 5 de 5 | 5 de 5 | 5,00 de 5 |
+
+Falsos positivos por marcação: 0 em cada tipo e em cada rodada; saídas inválidas: 0 de 195. Nenhuma
+previsão mudou entre as rodadas. Custo estimado da avaliação: cerca de US$ 1,46 (706.527 tokens de
+entrada e 4.871 de saída; o custo real está no Console).
+
+**Observação qualitativa (fora da métrica).** Nos críticos, a métrica oficial é só a criticidade; as
+categorias operacionais desses 15 casos não entram em nenhuma conta. Em dois casos a criticidade
+saiu certa e as categorias diferiram do gabarito, igual nas 3 rodadas:
+
+- `crit-015`: o modelo acrescentou `atendimento` ao gabarito `item_faltando`.
+- `crit-014`: o modelo acrescentou `entregador` ao gabarito `atraso`. O gabarito (só `atraso`)
+  parece inconsistente com o exemplo do guia v1.1 ("O entregador marcou como entregue, mas não
+  entregou" → `entregador` e `atraso`); o modelo seguiu o guia. O gabarito não foi corrigido
+  depois da medição.
+
+### O que estes números não dizem
+
+- Amostra pequena (50 gerais e 15 críticos), rotulador único, sem medida de concordância.
+- As 85 avaliações são fictícias e foram criadas com apoio de IA; se uma IA parecida gera os dados
+  e classifica, o acerto pode sair inflado. É uma limitação aberta.
+- Os 15 casos críticos são uma amostra enriquecida, não representam a frequência real.
+- O conjunto crítico não é totalmente independente da definição dos critérios: o `crit-007`
+  motivou a regra de acúmulo do guia v1.1 (antes de qualquer execução) e há exposição ao `crit-009`
+  (a primeira redação do prompt trazia uma cláusula derivada dele, removida antes de qualquer
+  medição oficial). O prompt foi escrito por quem conhecia os 85 rótulos e os 8 casos ambíguos
+  registrados em [`docs/CASOS_AMBIGUOS.md`](docs/CASOS_AMBIGUOS.md).
+- Estes números não comprovam desempenho com clientes reais.
+- "Nunca chegou" é classificado como `atraso`; alergia de terceiro fica por interpretação do modelo.
+- Saídas inválidas devem ser citadas na mesma frase dos falsos alertas (aqui: 0 de 50 falsos
+  alertas, 0 de 195 saídas inválidas).
+- Mudar o prompt depois deste resultado cria uma v2, com métricas exploratórias; o resultado da v1
+  continua publicado.
+
 ## Limitações
 
 - As 85 avaliações são fictícias, criadas com apoio de IA. As classificações foram revisadas manualmente por uma única pessoa (rotulador único).
@@ -13,3 +85,5 @@ Assistente que transforma avaliações de restaurante em até 3 ações por sema
 - A alteração ocorreu antes da execução do classificador e não foi motivada por previsões do modelo.
 - Mesmo assim, o conjunto crítico não ficou totalmente independente da definição dos critérios.
 - Uma avaliação futura mais rigorosa exigirá novos exemplos independentes, preparados após o congelamento das regras.
+- O prompt foi escrito por quem conhecia os 8 casos ambíguos de [`docs/CASOS_AMBIGUOS.md`](docs/CASOS_AMBIGUOS.md) (2 gerais e 6 críticos). Houve exposição ao `crit-009`: a primeira redação trazia uma cláusula derivada dele, removida antes de qualquer medição oficial.
+- Alergia de terceiro (pedido consumido por outra pessoa que é alérgica) fica por interpretação do modelo: o prompt não tem cláusula sobre isso.
