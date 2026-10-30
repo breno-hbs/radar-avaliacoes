@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Avaliação oficial: o lock e os logs de execuções abortadas ficam só na máquina;
+# avaliacao/resultados/ continua rastreado (relatório e diário da avaliação concluída).
+avaliacao/resultados/v1.lock
+avaliacao/abortadas/

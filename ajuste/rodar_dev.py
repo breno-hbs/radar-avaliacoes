@@ -13,12 +13,13 @@ Uso (faz chamadas pagas à API; só rodar quando decidido):
 import argparse
 import json
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.classificador import (
     PARAMETROS,
-    ErroPermanenteDaAPI,
+    ErroTecnicoDaAPI,
     carregar_prompt,
     classificar,
     criar_cliente,
@@ -63,13 +64,23 @@ def separar(avaliacoes):
     return [por_id[i] for i in FEWSHOT_IDS], [por_id[i] for i in MEDICAO_IDS]
 
 
-def rodar(avaliacoes, cliente, prompt, rodadas=3):
-    """Classifica cada avaliação `rodadas` vezes. O classificador recebe só o texto."""
+def _dormir(segundos):
+    """Espera entre tentativas. Procurada na hora da chamada, para os testes a trocarem por um registro."""
+    time.sleep(segundos)
+
+
+def rodar(avaliacoes, cliente, prompt, rodadas=3, dormir=None):
+    """Classifica cada avaliação `rodadas` vezes. O classificador recebe só o texto.
+
+    `dormir(segundos)` é a espera entre tentativas do classificador (padrão: espera de verdade).
+    Erro técnico esgotado ou permanente (ErroTecnicoDaAPI) aborta tudo e sobe daqui.
+    """
+    dormir = dormir or _dormir
     resultado = []
     for n in range(1, rodadas + 1):
         itens = []
         for a in avaliacoes:
-            r = classificar(a["texto"], cliente, prompt)
+            r = classificar(a["texto"], cliente, prompt, dormir=dormir)
             itens.append({
                 "id": a["id_externo"],
                 "texto": a["texto"],
@@ -121,8 +132,9 @@ def main(argv=None):
     cliente = criar_cliente()
     try:
         rodadas = rodar(avaliacoes, cliente, prompt, rodadas=args.rodadas)
-    except ErroPermanenteDaAPI as e:
-        # Aborta a execução inteira: nada é gravado, nem como saída inválida.
+    except ErroTecnicoDaAPI as e:
+        # Erro permanente ou erro técnico esgotado: aborta a execução inteira. Nada é gravado, nem
+        # como saída inválida, e a mensagem traz só tipo, status e request_id (nunca o corpo).
         sys.exit(f"Execução abortada, nada foi gravado: {e}")
 
     RELATORIOS.mkdir(exist_ok=True)
