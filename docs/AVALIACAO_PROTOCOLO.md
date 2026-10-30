@@ -20,7 +20,10 @@ congelada (`prompts/classificador/v1.congelamento.md`). Fonte dos requisitos:
 Nos 50 gerais:
 - F1 micro, F1 macro e F1 por categoria (as 6 categorias);
 - falsos alertas: avaliação **não crítica marcada como crítica** (conta 1 por avaliação);
-- saídas inválidas, **citadas na mesma frase dos falsos alertas**.
+- saídas inválidas, **citadas na mesma frase dos falsos alertas**, com **uma só base**: "nas 3
+  rodadas e nos 65 itens" (M de 195; inválida = previsão `None` em gerais ou críticos). Essa base
+  vale na frase de cada rodada, nas médias, no cabeçalho e nos dados JSON; a contagem por rodada, se
+  aparecer, vem separada e rotulada como detalhe.
 
 Nos 15 críticos:
 - recall geral como contagem (por exemplo, 14 de 15): a avaliação conta como detectada com
@@ -42,7 +45,9 @@ relatório diz quantas entraram.
   contrato, `max_tokens`, `refusal`, sem bloco de texto).
 - Antes de abortar por erro técnico, cada chamada é tentada até 3 vezes, com espera fixa de 2 s
   antes da 2ª e 5 s antes da 3ª. A **última** falha decide: de conteúdo → saída inválida; técnica →
-  aborto.
+  aborto. Caso misto: técnica, técnica, conteúdo → `None` (saída inválida), porque a última falha
+  foi de conteúdo; conteúdo, conteúdo, técnica → aborto. O relatório lista o tipo de cada tentativa
+  dos itens inválidos.
 - O script grava cada item no diário (`avaliacao/resultados/v1/diario.jsonl`) assim que termina,
   para que Ctrl+C não perca chamadas pagas. O **relatório e as métricas só existem** se as 3 rodadas
   terminarem.
@@ -108,19 +113,35 @@ Qualquer ajuste do prompt (ou de qualquer item congelado) depois de ver o result
 
 ## 7. Como executar (quando chegar a hora)
 
-Pré-requisitos: PR do congelamento mergeado, tag `classificador-v1-congelado` no commit do merge,
-árvore limpa e `ANTHROPIC_API_KEY` no `.env`.
+Pré-requisitos, nesta ordem:
+1. PR do congelamento mergeado; **executar a partir de `main` atualizada** (`git checkout main &&
+   git pull`), nunca da branch da feature (um squash faria a tag deixar de ser ancestral do `HEAD`).
+2. Antes de criar a tag, conferir os hashes dos dados localmente (só imprime hashes):
+   `python -c "from avaliacao.congelamento import hash_dados; print(hash_dados('data/geral.json'),
+   hash_dados('data/critico.json'))"` e comparar com `dados_*_sha256` do registro.
+3. Criar a tag `classificador-v1-congelado` no commit do merge e **enviá-la ao GitHub**
+   (`git push origin classificador-v1-congelado`). A tag marca o instante do congelamento; não se
+   move (`git tag -f` é proibido) e, se um item congelado precisar mudar, vira a v2.
+4. Árvore limpa e `ANTHROPIC_API_KEY` no `.env`.
+
+O relatório grava o **SHA do commit da tag** e o **`HEAD` da execução**; o diário grava os dois no
+início (`--so-relatorio` exige que o SHA da tag continue o mesmo).
 
 ```bash
 python -m avaliacao.rodar_oficial               # dry-run: não abre dados nem chama a API
 python -m avaliacao.rodar_oficial --executar    # avaliação oficial (195 chamadas)
+python -m avaliacao.rodar_oficial --so-relatorio  # regenera o relatório de um diário completo
 ```
 
-Códigos de saída: 0 sucesso ou dry-run; 1 aborto durante a execução (erro permanente ou técnico
-esgotado, qualquer exceção); 2 congelamento diverge do código (também é o
-código de erro de argumentos); 3 alterações não commitadas; 4 avaliação já concluída; 5 diário
-anterior sem `--motivo-tecnico`, motivo sem nada a arquivar ou diário completo que deve usar
-`--so-relatorio`; 6 conjunto de dados inválido; 7 tag, ancestralidade ou arquivos congelados; 8 hash
-dos dados diverge do registro; 9 outra execução em andamento (trava); 10 cliente não pôde ser
-criado (chave ausente?); 11 `--so-relatorio` inválido (diário ausente, incompleto, abortado ou com
-hashes diferentes); 130 interrompido (Ctrl+C).
+`--so-relatorio` aplica as mesmas travas de hashes, git e tag/arquivos congelados do `--executar`.
+
+Códigos de saída (também na ajuda do script, `--help`): 0 sucesso ou dry-run; 1 aborto durante a
+execução (erro permanente, erro técnico esgotado, qualquer exceção) ou falha ao gerar o relatório;
+2 congelamento diverge do código (também é o código de erro de argumentos); 3 alterações não
+commitadas ou git indisponível; 4 avaliação já concluída (ou relatório presente, possivelmente
+incompleto); 5 diário anterior sem `--motivo-tecnico`, motivo sem nada a arquivar, diário completo
+(use `--so-relatorio`) ou falha ao arquivar; 6 conjunto de dados inválido; 7 tag, ancestralidade ou
+arquivos congelados; 8 hash dos dados diverge do registro; 9 outra execução em andamento ou não foi
+possível criar o lock; 10 cliente não pôde ser criado (chave ausente?); 11 `--so-relatorio` inválido
+(diário ausente, incompleto, abortado, com hashes ou SHA da tag diferentes); 130 interrompido
+(Ctrl+C).
