@@ -171,7 +171,9 @@ def test_metadados_completos(md):
     assert f"- SHA-256 dos dados gerais: {'g' * 64}" in meta
     assert f"- SHA-256 dos dados críticos: {'k' * 64}" in meta
     # 195 itens com 1 tentativa, mais 2 extras em ger-010 da rodada 2.
-    assert "Total de chamadas: 197" in meta
+    assert "Chamadas planejadas: 195" in meta
+    assert "Chamadas realizadas: 197 (inclui retentativas)" in meta
+    assert "Total de chamadas" not in meta
     assert "Tentativas extras: 2" in meta
     # commit da tag e HEAD da execução, cada um na sua linha rotulada
     assert f"- Commit da tag classificador-v1-congelado: {TAG_SHA}" in meta
@@ -194,7 +196,7 @@ def test_dados_tem_cabecalho_equivalente(dados):
     assert dados["tag_sha"] == TAG_SHA
     # campo único da base de saídas inválidas e total de chamadas aos itens (195, sem retentativas)
     assert dados["saidas_invalidas_total"] == 2
-    assert dados["total_chamadas_itens"] == 195
+    assert dados["chamadas_planejadas"] == 195
     assert dados["modelo"] == "claude-sonnet-5-5"
     assert dados["hashes"]["prompt_sha256"] == "p" * 64
     assert dados["hashes"]["regra_retentativa_sha256"] == "r" * 64
@@ -204,7 +206,7 @@ def test_dados_tem_cabecalho_equivalente(dados):
     assert dados["git_head_atual"] is None
     assert dados["iniciado_em"] == "2026-10-30T09:00:00-03:00"
     assert dados["concluido_em"] == "2026-10-30T09:20:00-03:00"
-    assert dados["total_chamadas"] == 197
+    assert dados["chamadas_realizadas"] == 197
     assert dados["tentativas_extras"] == 2
     assert dados["parametros"]["max_tokens"] == 400
 
@@ -290,7 +292,9 @@ def test_rodada_2_gerais_com_invalida_e_falso_alerta(md, dados):
     assert f1["macro_f1"] == pytest.approx((5 + 14 / 15) / 6)
     assert f1["por_categoria"]["embalagem"]["fn"] == 1
     fa = dados["rodadas"][1]["gerais"]["falsos_alertas"]
-    assert (fa["falsos_alertas"], fa["total_nao_criticas"], fa["saidas_invalidas"]) == (1, 50, 1)
+    assert (fa["falsos_alertas"], fa["total_nao_criticas"],
+            fa["auxiliar_invalidas_gerais_da_rodada"]) == (1, 50, 1)
+    assert "saidas_invalidas" not in fa
 
 
 def test_rodada_3_gerais_com_falso_positivo_de_categoria(md, dados):
@@ -318,18 +322,20 @@ def test_toda_rodada_tem_as_seis_categorias_e_o_fora_do_macro(md):
 def test_dados_das_saidas_invalidas_uma_base_e_detalhe_por_rodada(dados):
     # inválidas = previsão None em gerais E críticos. Base única nos dados:
     assert dados["saidas_invalidas_total"] == 2
-    assert dados["total_chamadas_itens"] == 195
+    assert dados["chamadas_planejadas"] == 195
     # a contagem por rodada é só detalhe: sem os totais das três rodadas repetidos
     esperado = [
         {"na_rodada": 0, "itens_da_rodada": 65},
         {"na_rodada": 1, "itens_da_rodada": 65},
         {"na_rodada": 1, "itens_da_rodada": 65},
     ]
-    assert [r["saidas_invalidas"] for r in dados["rodadas"]] == esperado
-    assert sum(r["saidas_invalidas"]["na_rodada"] for r in dados["rodadas"]) == \
+    assert [r["auxiliar_invalidas_por_rodada"] for r in dados["rodadas"]] == esperado
+    assert all("saidas_invalidas" not in r for r in dados["rodadas"])
+    assert sum(r["auxiliar_invalidas_por_rodada"]["na_rodada"] for r in dados["rodadas"]) == \
         dados["saidas_invalidas_total"]
     # a contagem dos gerais sozinha continua nas métricas brutas (fora de qualquer frase)
-    assert [r["gerais"]["falsos_alertas"]["saidas_invalidas"] for r in dados["rodadas"]] == [0, 1, 0]
+    assert [r["gerais"]["falsos_alertas"]["auxiliar_invalidas_gerais_da_rodada"]
+            for r in dados["rodadas"]] == [0, 1, 0]
     # as médias não carregam mais uma segunda base de saídas inválidas
     assert "saidas_invalidas_media" not in dados["medias"]["gerais"]["falsos_alertas"]
     assert "saidas_invalidas_media" not in dados["medias"]["criticos"]
@@ -381,8 +387,8 @@ def test_frase_dos_falsos_alertas_usa_os_totais_reais_da_execucao():
         assert (f"Falsos alertas: 0 de 1 avaliações não críticas marcadas como críticas "
                 f"(saídas inválidas nas 3 rodadas e nos 2 itens: 2 de 6).") in _gerais(md, n)
         assert f"- Detalhe desta rodada: saídas inválidas: {invalidas} de 2 itens." in _rodada(md, n)
-    assert dados["rodadas"][1]["saidas_invalidas"] == {"na_rodada": 1, "itens_da_rodada": 2}
-    assert (dados["saidas_invalidas_total"], dados["total_chamadas_itens"]) == (2, 6)
+    assert dados["rodadas"][1]["auxiliar_invalidas_por_rodada"] == {"na_rodada": 1, "itens_da_rodada": 2}
+    assert (dados["saidas_invalidas_total"], dados["chamadas_planejadas"]) == (2, 6)
 
 
 def test_saidas_invalidas_dos_gerais_sempre_na_frase_dos_falsos_alertas(md):
@@ -422,7 +428,36 @@ def test_rodada_3_criticos_com_invalida(md, dados):
     assert "Recall geral: 14 de 15" in c
     assert "saude: 4 de 5, falsos positivos da marcação: 0" in c
     assert "saídas inválidas" not in c
-    assert dados["rodadas"][2]["criticos"]["saidas_invalidas"] == 1  # métrica bruta, fora de frase
+    # métrica bruta, fora de frase
+    assert dados["rodadas"][2]["criticos"]["auxiliar_invalidas_criticos_da_rodada"] == 1
+    assert "saidas_invalidas" not in dados["rodadas"][2]["criticos"]
+
+
+# ---------- nomes das contagens (JSON inteiro) ----------
+
+def _chaves_recursivas(obj):
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            yield k
+            yield from _chaves_recursivas(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _chaves_recursivas(v)
+
+
+def test_json_tem_uma_unica_contagem_oficial_de_invalidas_e_chamadas_renomeadas(dados):
+    chaves = list(_chaves_recursivas(dados))
+    # (a) so um campo com "invalid" sem o prefixo auxiliar_
+    sem_prefixo = {k for k in chaves if "invalid" in k.lower() and not k.startswith("auxiliar_")}
+    assert sem_prefixo == {"saidas_invalidas_total"}
+    assert chaves.count("saidas_invalidas_total") == 1
+    # (b) nomes antigos de chamadas nao existem mais
+    assert "total_chamadas" not in chaves and "total_chamadas_itens" not in chaves
+    # (c) planejadas = 3 x 65; realizadas = soma das tentativas dos itens falsos
+    tentativas = sum(i["tentativas"] for r in _execucao()["rodadas"] for i in r["itens"])
+    assert dados["chamadas_planejadas"] == 195
+    assert dados["chamadas_realizadas"] >= 195
+    assert dados["chamadas_realizadas"] == tentativas == 197
 
 
 # ---------- médias ----------

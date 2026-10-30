@@ -23,8 +23,12 @@ de erro de cada tentativa (campo `erros[].tipo`), nunca a mensagem nem o corpo.
 UMA base de saídas inválidas em todo o relatório: "saídas inválidas nas 3 rodadas e nos N itens: M de
 T" (M = previsões None somando as 3 rodadas, em gerais e críticos; T = itens das 3 rodadas). Ela vale
 no cabeçalho, na frase dos falsos alertas de cada rodada e na das médias, e nos dados
-(saidas_invalidas_total e total_chamadas_itens). A contagem de uma rodada só aparece na linha
-separada "Detalhe desta rodada". Modelos: "usos[].modelo" é o que a API informou em response.model.
+(saidas_invalidas_total, o único campo de inválidas sem prefixo). Toda contagem bruta por rodada ou
+por conjunto leva o prefixo "auxiliar_" (auxiliar_invalidas_por_rodada,
+auxiliar_invalidas_gerais_da_rodada, auxiliar_invalidas_criticos_da_rodada) e não é a base oficial.
+A contagem de uma rodada só aparece na linha separada "Detalhe desta rodada".
+Chamadas: "chamadas_planejadas" = rodadas x itens (3 x 65 = 195); "chamadas_realizadas" = soma das
+tentativas de todos os itens, inclusive as retentativas. Modelos: "usos[].modelo" é o que a API informou em response.model.
 """
 import copy
 import json
@@ -135,6 +139,9 @@ def _metricas_da_rodada(rodada, geral, critico):
         raise ValueError(f"a rodada {rodada['rodada']} precisa de itens dos dois conjuntos")
     f1 = f1_categorias([i["gabarito"]["categorias"] for i in gerais],
                        [_campo(i, "categorias") for i in gerais])
+    # Contagem bruta de inválidas do F1 (mesmo valor de auxiliar_invalidas_gerais_da_rodada):
+    # nada a usa; removida para não haver segunda contagem.
+    f1.pop("saidas_invalidas", None)
     alertas = falsos_alertas([i["gabarito"]["criticidade"] for i in gerais],
                              [_campo(i, "criticidade") for i in gerais])
     recall = recall_criticos([i["gabarito"]["criticidade"] for i in criticos],
@@ -260,7 +267,7 @@ def _parametros_resumidos(parametros):
 
 # ---------- markdown ----------
 
-def _md_metadados(e, total_chamadas, extras, modelos, base):
+def _md_metadados(e, planejadas, realizadas, extras, modelos, base):
     h = e.get("hashes") or {}
     return [
         "## Metadados", "",
@@ -280,7 +287,8 @@ def _md_metadados(e, total_chamadas, extras, modelos, base):
         f"- Modelos informados pela API: {', '.join(modelos) if modelos else 'não informado'}",
         f"- Início: {e['iniciado_em']}",
         f"- Fim: {e['concluido_em']}",
-        f"- Total de chamadas: {total_chamadas}",
+        f"- Chamadas planejadas: {planejadas}",
+        f"- Chamadas realizadas: {realizadas} (inclui retentativas)",
         f"- Tentativas extras: {extras}",
         f"- {base[0].upper()}{base[1:]}",
         "",
@@ -455,7 +463,8 @@ def gerar_relatorio_oficial(execucao, conjunto_geral=CONJUNTO_GERAL,
     abortadas = copy.deepcopy(execucao.get("abortadas") or [])
 
     itens = [i for r in rodadas for i in r["itens"]]
-    total_chamadas = sum(i["tentativas"] for i in itens)
+    chamadas_planejadas = len(itens)
+    chamadas_realizadas = sum(i["tentativas"] for i in itens)
     extras = sum(max(i["tentativas"] - 1, 0) for i in itens)
 
     metricas = [_metricas_da_rodada(r, conjunto_geral, conjunto_critico) for r in rodadas]
@@ -465,7 +474,11 @@ def gerar_relatorio_oficial(execucao, conjunto_geral=CONJUNTO_GERAL,
     total_invalidas = sum(invalidas)
     base = _frase_base(total_invalidas, len(rodadas[0]["itens"]), len(itens))
     for m, r, n in zip(metricas, rodadas, invalidas):
-        m["saidas_invalidas"] = {"na_rodada": n, "itens_da_rodada": len(r["itens"])}
+        m["auxiliar_invalidas_por_rodada"] = {"na_rodada": n, "itens_da_rodada": len(r["itens"])}
+        # contagens brutas de app.metricas: renomeadas aqui, fora da base oficial
+        fa = m["gerais"]["falsos_alertas"]
+        fa["auxiliar_invalidas_gerais_da_rodada"] = fa.pop("saidas_invalidas")
+        m["criticos"]["auxiliar_invalidas_criticos_da_rodada"] = m["criticos"].pop("saidas_invalidas")
     modelos = _modelos_da_execucao(rodadas)
     medias = _medias(metricas)
     variacao = _variacao(rodadas)
@@ -487,10 +500,10 @@ def gerar_relatorio_oficial(execucao, conjunto_geral=CONJUNTO_GERAL,
         "tag_sha": execucao.get("tag_sha"),
         "modelos_informados": modelos,
         "saidas_invalidas_total": total_invalidas,
-        "total_chamadas_itens": len(itens),
+        "chamadas_planejadas": chamadas_planejadas,
         "iniciado_em": execucao["iniciado_em"],
         "concluido_em": execucao["concluido_em"],
-        "total_chamadas": total_chamadas,
+        "chamadas_realizadas": chamadas_realizadas,
         "tentativas_extras": extras,
         "n_abortadas": len(abortadas),
         "abortadas": abortadas,
@@ -506,10 +519,10 @@ def gerar_relatorio_oficial(execucao, conjunto_geral=CONJUNTO_GERAL,
     linhas = [f"# Avaliação oficial da {execucao['versao']} (prompt congelado). {AVISO}", ""]
     if so_relatorio:
         linhas += [MARCA_SO_RELATORIO.format(head=git_head_atual), ""]
-    linhas += _md_metadados(execucao, total_chamadas, extras, modelos, base)
+    linhas += _md_metadados(execucao, chamadas_planejadas, chamadas_realizadas, extras, modelos, base)
     linhas += _md_abortadas(abortadas)
     for m in metricas:
-        det = m["saidas_invalidas"]
+        det = m["auxiliar_invalidas_por_rodada"]
         linhas += [f"## Rodada {m['rodada']}", "",
                    f"- Detalhe desta rodada: saídas inválidas: {det['na_rodada']} de "
                    f"{det['itens_da_rodada']} itens.", ""]

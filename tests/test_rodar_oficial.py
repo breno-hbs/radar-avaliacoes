@@ -988,7 +988,7 @@ def test_execucao_completa_feliz(monkeypatch, clientes_criados, capsys, esperas)
     dados = json.loads((ro.PASTA_RESULTADOS / "relatorio.json").read_text(encoding="utf-8"))
     assert "Recall geral: 15 de 15" in md
     assert dados["rodadas"][0]["gerais"]["f1"]["micro"]["f1"] == 1.0
-    assert dados["total_chamadas"] == 195
+    assert dados["chamadas_realizadas"] == 195
     for chave, valor in {**hashes_atuais("v1"), **hashes_dos_dados_falsos()}.items():
         assert dados["hashes"][chave] == valor
     assert hashes_dos_dados_falsos()["dados_geral_sha256"] in md
@@ -999,7 +999,7 @@ def test_execucao_completa_feliz(monkeypatch, clientes_criados, capsys, esperas)
     assert f"- HEAD da execução: {HEAD_FALSO}" in md
     assert dados["modelos_informados"] == [MODELO_FALSO]
     assert f"- Modelos informados pela API: {MODELO_FALSO}" in md
-    assert dados["saidas_invalidas_total"] == 0 and dados["total_chamadas_itens"] == 195
+    assert dados["saidas_invalidas_total"] == 0 and dados["chamadas_planejadas"] == 195
     assert not ro.ARQUIVO_LOCK.exists()
     assert esperas == []  # nenhuma retentativa, nenhuma espera
 
@@ -1148,7 +1148,7 @@ def test_falha_de_conteudo_esgotada_vira_saida_invalida_sem_abortar(monkeypatch,
     assert item10["id"] == "ger-010" and item10["previsao"] is None and item10["tentativas"] == 3
     assert [e["tipo"] for e in item10["erros"]] == ["json_invalido"] * 3
     dados = json.loads((ro.PASTA_RESULTADOS / "relatorio.json").read_text(encoding="utf-8"))
-    assert dados["rodadas"][0]["saidas_invalidas"]["na_rodada"] == 1
+    assert dados["rodadas"][0]["auxiliar_invalidas_por_rodada"]["na_rodada"] == 1
     assert dados["erros"][0]["gerais"][0]["tipos_de_erro"] == [
         {"tentativa": 1, "tipo": "json_invalido"}, {"tentativa": 2, "tipo": "json_invalido"},
         {"tentativa": 3, "tipo": "json_invalido"}]
