@@ -55,9 +55,9 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | `GET /resumo-semanal` | n8n | `X-API-Key` | Devolve período, total, negativas, 3 principais problemas, críticos, ações pendentes e o link do painel |
 | `GET /painel/{token}` | Dono (navegador) | Token com validade (tokens\_painel) | Serve a página mobile-first |
 | `GET /api/painel/{token}/cards` | Painel | Token | Cards com problema, evidências e recomendação |
-| `POST /api/painel/{token}/acoes` | Painel | Token | Registra uma ação |
+| `POST /api/painel/{token}/acoes` | Painel | Token | Registra uma ação e as evidências exibidas no card |
 | `PATCH /api/painel/{token}/acoes/{id}` | Painel | Token | Muda o estado da ação |
-| `GET /api/painel/{token}/historico` | Painel | Token | Semanas anteriores |
+| `GET /api/painel/{token}/historico` | Painel | Token | Semanas anteriores, com as ações registradas, suas evidências (trecho exibido e posição) e o texto original das avaliações |
 
 **Regras de segurança:**
 
@@ -73,6 +73,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | `avaliacoes` | `id`, `id_externo` (único), `texto`, `nota`, `recebida_em`, `prazo_resposta` (= recebida\_em + 5 dias), `categorias`, `criticidade`, `confianca` |
 | `alertas` | `id`, `avaliacao_id`, `tipos`, `estado`, `tentativas`, `criado_em`, `enviado_em`; único por `avaliacao_id`. `tipos` é a lista de todas as marcações críticas da avaliação |
 | `acoes` | `id`, `categoria`, `semana_inicio`, `estado`, `criada_em`, `concluida_em`, `nota` |
+| `acao_avaliacoes` | `acao_id` (referência a `acoes`), `avaliacao_id` (referência a `avaliacoes`), `trecho_exibido`, `posicao` (de 1 a 3); chave primária (`acao_id`, `avaliacao_id`) e único por (`acao_id`, `posicao`) |
 | tokens\_painel | id, token\_hash (único, SHA-256), escopo, criado\_em, expira\_em (= criado\_em + 7 dias), revogado\_em |
 
 **Estados:** alerta → `pendente`, `enviado` ou `falhou`. Ação → `pendente`, `em_andamento` ou `concluida`.
@@ -85,7 +86,16 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Decisão em aberto (Fase 2):** definir a recuperação de alertas `pendente` após o reinício do servidor e o tratamento dos alertas `falhou` (reenvio automático, reenvio manual ou apenas o registro). Registrar o alerta no banco e mostrá-lo no resumo semanal não equivale a garantir aviso imediato ao dono: um alerta `pendente` ou `falhou` pode ficar sem ser entregue até o próximo resumo. Definir também se o resumo semanal mostra o estado do alerta (`pendente`, `enviado` ou `falhou`), já que o contrato de `GET /resumo-semanal` não o inclui.
 
-**Decisão em aberto (Fase 2):** definir como cada ação registrada será vinculada às avaliações usadas como evidência, considerando uma tabela `acao_avaliacoes` ou estrutura equivalente. Não é necessário implementar isso na Fase 1.
+**Decisão tomada (30/10/2026), Fase 2:** cada ação registrada fica ligada às avaliações que serviram de evidência, na tabela `acao_avaliacoes`. O critério: o sistema guarda o que o dono viu quando decidiu. Regras:
+
+- Uma ação tem até três avaliações como evidência, e uma avaliação pode ser evidência de várias ações. O banco garante a integridade referencial com `acoes` e `avaliacoes`.
+- A ligação é gravada no momento em que o dono registra a ação, com as evidências efetivamente exibidas no card. O servidor não recalcula o ranking nesse momento.
+- `trecho_exibido` guarda o trecho mostrado ao dono e `posicao`, a ordem no card, para que o histórico reproduza o card mesmo que a seleção de trechos mude no futuro.
+- Não se associam à ação todas as avaliações da categoria. A quantidade de menções continua calculada das tabelas.
+- O histórico permite consultar a ação, suas evidências e o texto original de cada avaliação.
+- A medição do efeito continua usando `categoria` e `semana_inicio`, e não usa essa tabela.
+
+**Decisão em aberto (Fase 2):** definir como o `POST /api/painel/{token}/acoes` recebe as evidências exibidas e como o servidor confere que elas pertencem ao card (por exemplo, que a avaliação é da categoria e da semana do card e que `trecho_exibido` vem do texto dela), sem recalcular o ranking.
 
 ## Regras de negócio
 
