@@ -163,6 +163,18 @@ chamadas planejadas). A terceira regenera o relatório de um diário completo, s
 `--so-relatorio` aplica as mesmas travas de hashes, git e tag/arquivos congelados do `--executar`.
 Para ver só a ajuda e os códigos de saída: `python -m avaliacao.rodar_oficial --help`.
 
+**Alternativas se algum comando falhar no PowerShell 5.1:**
+- Se `Activate.ps1` for bloqueado pela política de execução ("scripts desabilitados"), não ative o
+  ambiente: chame o Python do ambiente direto, por exemplo
+  `.\.venv\Scripts\python.exe -m avaliacao.rodar_oficial` (vale para os três comandos acima e para o
+  `python -c` do passo 2). Ou, só para a sessão atual:
+  `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
+- Se as aspas do `python -c` derem problema, grave o mesmo código em um arquivo temporário fora do
+  repositório (as duas chamadas de `hash_dados` do passo 2) e rode `python caminho\dorquivo.py`.
+- O `git push` escreve o progresso em stderr, e o PowerShell 5.1 pode mostrar isso como erro mesmo
+  com sucesso. Para conferir que a tag foi enviada: `git ls-remote --tags origin classificador-v1-congelado`
+  (deve listar a tag).
+
 Códigos de saída (também na ajuda do script, `--help`): 0 sucesso ou dry-run; 1 aborto durante a
 execução (erro permanente, erro técnico esgotado, qualquer exceção) ou falha ao gerar o relatório;
 2 congelamento diverge do código (também é o código de erro de argumentos); 3 alterações não
