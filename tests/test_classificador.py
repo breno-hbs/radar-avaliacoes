@@ -172,7 +172,7 @@ def test_resposta_valida_em_uma_tentativa():
         "saida": {"categorias": ["atraso", "embalagem"], "criticidade": ["saude"]},
         "tentativas": 1,
         "erros": [],
-        "usos": [{"tentativa": 1, "input_tokens": None, "output_tokens": None}],
+        "usos": [{"tentativa": 1, "input_tokens": None, "output_tokens": None, "modelo": None}],
     }
 
 
@@ -186,7 +186,8 @@ def _com_uso(resposta, entrada, saida):
 def test_uso_de_tokens_e_devolvido_por_tentativa():
     cliente = ClienteFalso([_com_uso(ok(), 2500, 40)])
     r = classificar("texto", cliente, PROMPT)
-    assert r["usos"] == [{"tentativa": 1, "input_tokens": 2500, "output_tokens": 40}]
+    assert r["usos"] == [{"tentativa": 1, "input_tokens": 2500, "output_tokens": 40,
+                          "modelo": None}]
 
 
 def test_uso_inclui_tentativas_com_resposta_ruim_e_pula_excecoes():
@@ -198,9 +199,28 @@ def test_uso_inclui_tentativas_com_resposta_ruim_e_pula_excecoes():
     r = classificar("texto", cliente, PROMPT)
     assert r["tentativas"] == 3
     assert r["usos"] == [
-        {"tentativa": 2, "input_tokens": 2500, "output_tokens": 12},
-        {"tentativa": 3, "input_tokens": 2500, "output_tokens": 40},
+        {"tentativa": 2, "input_tokens": 2500, "output_tokens": 12, "modelo": None},
+        {"tentativa": 3, "input_tokens": 2500, "output_tokens": 40, "modelo": None},
     ]
+
+
+def test_uso_registra_o_modelo_informado_pela_api_por_tentativa():
+    # response.model é o que a API informou; sem o atributo, o modelo fica None.
+    ruim = _com_uso(texto("{não é json"), 10, 1)
+    ruim.model = "modelo-informado-A"
+    bom = _com_uso(ok(), 10, 2)
+    bom.model = "modelo-informado-B"
+    r = classificar("texto", ClienteFalso([ruim, bom]), PROMPT)
+    assert [u["modelo"] for u in r["usos"]] == ["modelo-informado-A", "modelo-informado-B"]
+
+
+def test_registrar_o_modelo_nao_muda_a_requisicao():
+    resposta = _com_uso(ok(), 1, 1)
+    resposta.model = "qualquer"
+    cliente = ClienteFalso([resposta])
+    classificar("texto", cliente, PROMPT)
+    assert cliente.chamadas[0] == {**PARAMETROS, "system": PROMPT,
+                                   "messages": [{"role": "user", "content": "texto"}]}
 
 
 def test_uso_em_tres_falhas_com_resposta():

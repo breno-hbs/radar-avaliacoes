@@ -208,7 +208,8 @@ def _uso(tentativa, resposta):
     uso = getattr(resposta, "usage", None)
     return {"tentativa": tentativa,
             "input_tokens": getattr(uso, "input_tokens", None),
-            "output_tokens": getattr(uso, "output_tokens", None)}
+            "output_tokens": getattr(uso, "output_tokens", None),
+            "modelo": getattr(resposta, "model", None)}
 
 
 def _interpretar(resposta):
@@ -232,10 +233,12 @@ def classificar(texto, cliente, prompt, dormir=time.sleep):
     """Classifica UMA avaliação.
 
     Devolve {"saida": dict validado ou None, "tentativas": int, "erros": [registros],
-    "usos": [{"tentativa", "input_tokens", "output_tokens"}]}.
+    "usos": [{"tentativa", "input_tokens", "output_tokens", "modelo"}]}.
     "usos" guarda response.usage de cada tentativa que recebeu resposta (inclusive as
     respostas ruins, que também gastam tokens); tentativas que levantaram exceção não têm
-    resposta e ficam fora. Valor ausente no usage vira None.
+    resposta e ficam fora. Valor ausente no usage vira None. "modelo" é response.model, o modelo
+    que a API informou ter respondido (None se a resposta não o trouxer); é só registro, não
+    entra na requisição.
 
     Regra de retentativa: ver o docstring do módulo. Resumo: até 3 chamadas, com espera de
     ESPERAS[0] e ESPERAS[1] segundos (via `dormir`) antes da 2ª e da 3ª; esgotadas, a ÚLTIMA falha

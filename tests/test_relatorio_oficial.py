@@ -22,6 +22,9 @@ Execução falsa (índices a partir de 0; ids ger-001..ger-050 e crit-001..crit-
             (sem erros registrados).
             -> embalagem fp=1 (F1 16/17); micro 100/101; recall 14 de 15; saude 4 de 5.
 - saídas inválidas (None em gerais E críticos): 0 na rodada 1, 1 na 2, 1 na 3; 2 de 195 nas três.
+  Esta é a ÚNICA base citada no relatório: "saídas inválidas nas 3 rodadas e nos 65 itens: 2 de
+  195". A contagem por rodada só aparece na linha "Detalhe desta rodada".
+- tag_sha da execução falsa: TAG_SHA; git_head da execução: abc123def456.
 """
 import copy
 import json
@@ -40,8 +43,13 @@ from app.contrato import CATEGORIAS, CRITICIDADES
 
 # ---------- execução falsa ----------
 
-def _uso(tentativa=1, entrada=1000, saida=50):
-    return {"tentativa": tentativa, "input_tokens": entrada, "output_tokens": saida}
+TAG_SHA = "7a9e" * 10
+FRASE_BASE = "saídas inválidas nas 3 rodadas e nos 65 itens: 2 de 195"
+
+
+def _uso(tentativa=1, entrada=1000, saida=50, modelo=None):
+    return {"tentativa": tentativa, "input_tokens": entrada, "output_tokens": saida,
+            "modelo": modelo}
 
 
 def _item(conjunto, id_, texto, categorias, criticidade):
@@ -92,6 +100,7 @@ def _execucao(abortadas=None):
             "dados_geral_sha256": "g" * 64, "dados_critico_sha256": "k" * 64,
         },
         "git_head": "abc123def456",
+        "tag_sha": TAG_SHA,
         "iniciado_em": "2026-10-30T09:00:00-03:00",
         "concluido_em": "2026-10-30T09:20:00-03:00",
         "modelo": "claude-sonnet-5-5",
@@ -164,11 +173,28 @@ def test_metadados_completos(md):
     # 195 itens com 1 tentativa, mais 2 extras em ger-010 da rodada 2.
     assert "Total de chamadas: 197" in meta
     assert "Tentativas extras: 2" in meta
+    # commit da tag e HEAD da execução, cada um na sua linha rotulada
+    assert f"- Commit da tag classificador-v1-congelado: {TAG_SHA}" in meta
+    assert "- HEAD da execução: abc123def456" in meta
+    # a base única das saídas inválidas também fica no cabeçalho
+    assert f"- {FRASE_BASE[0].upper()}{FRASE_BASE[1:]}" in meta
+
+
+def test_sem_tag_sha_na_execucao_o_relatorio_diz_nao_informado():
+    e = _execucao()
+    del e["tag_sha"]
+    md_sem, dados_sem = gerar_relatorio_oficial(e)
+    assert "- Commit da tag classificador-v1-congelado: não informado" in md_sem
+    assert dados_sem["tag_sha"] is None
 
 
 def test_dados_tem_cabecalho_equivalente(dados):
     assert dados["versao"] == "v1"
     assert dados["git_head"] == "abc123def456"
+    assert dados["tag_sha"] == TAG_SHA
+    # campo único da base de saídas inválidas e total de chamadas aos itens (195, sem retentativas)
+    assert dados["saidas_invalidas_total"] == 2
+    assert dados["total_chamadas_itens"] == 195
     assert dados["modelo"] == "claude-sonnet-5-5"
     assert dados["hashes"]["prompt_sha256"] == "p" * 64
     assert dados["hashes"]["regra_retentativa_sha256"] == "r" * 64
@@ -198,8 +224,9 @@ def test_relatorio_gerado_por_so_relatorio_mostra_a_marca_e_o_head_atual():
     # no cabeçalho: logo depois do título, antes dos metadados
     assert linhas[1] == "" and linhas[2] == marca
     assert md_so.index(marca) < md_so.index("## Metadados")
-    # o commit avaliado continua sendo o do diário, não o atual
-    assert "- Commit avaliado (git HEAD): abc123def456" in md_so
+    # o HEAD da execução continua sendo o do diário, não o atual; o atual aparece na marca
+    assert "- HEAD da execução: abc123def456" in md_so
+    assert "HEAD da execução: fedcba987654" not in md_so
     assert dados_so["gerado_por_so_relatorio"] is True
     assert dados_so["git_head_atual"] == "fedcba987654"
     assert dados_so["git_head"] == "abc123def456"
@@ -238,9 +265,10 @@ def test_rodada_1_gerais_perfeita(md, dados):
     assert "F1 micro: 1,000" in g
     assert "F1 macro: 1,000" in g
     assert "categorias_fora_do_macro: []" in g
-    # inválidas = previsão None em gerais E críticos: 0 na rodada 1; 2 nas três (ger-010 r2, crit-013 r3)
+    # inválidas = previsão None em gerais E críticos: 2 nas três rodadas (ger-010 r2, crit-013 r3),
+    # sempre a mesma base, também na rodada 1 (que tem 0)
     assert ("Falsos alertas: 0 de 50 avaliações não críticas marcadas como críticas "
-            "(saídas inválidas: 0 nos 65 itens desta rodada; 2 de 195 nas 3 rodadas).") in g
+            "(saídas inválidas nas 3 rodadas e nos 65 itens: 2 de 195).") in g
     f1 = dados["rodadas"][0]["gerais"]["f1"]
     assert f1["micro"]["f1"] == pytest.approx(1.0)
     assert f1["macro_f1"] == pytest.approx(1.0)
@@ -253,9 +281,9 @@ def test_rodada_2_gerais_com_invalida_e_falso_alerta(md, dados):
     assert "F1 macro: 0,989" in g
     assert re.search(r"\| embalagem \| 7 \| 0 \| 1 \| 1,000 \| 0,875 \| 0,933 \|", g)
     assert re.search(r"\| atraso \| 9 \| 0 \| 0 \| 1,000 \| 1,000 \| 1,000 \|", g)
-    # frase única: falsos alertas e saídas inválidas juntos
+    # frase única: falsos alertas e a base única de saídas inválidas (não a contagem da rodada)
     frase = ("Falsos alertas: 1 de 50 avaliações não críticas marcadas como críticas "
-             "(saídas inválidas: 1 nos 65 itens desta rodada; 2 de 195 nas 3 rodadas).")
+             "(saídas inválidas nas 3 rodadas e nos 65 itens: 2 de 195).")
     assert frase in g
     f1 = dados["rodadas"][1]["gerais"]["f1"]
     assert f1["micro"]["f1"] == pytest.approx(98 / 99)
@@ -271,9 +299,9 @@ def test_rodada_3_gerais_com_falso_positivo_de_categoria(md, dados):
     assert "F1 micro: 0,990 (precisão 0,980, recall 1,000)" in g
     assert "F1 macro: 0,990" in g
     assert re.search(r"\| embalagem \| 8 \| 1 \| 0 \| 0,889 \| 1,000 \| 0,941 \|", g)
-    # a saída inválida da rodada 3 é de um CRÍTICO (crit-013): entra na contagem da rodada
+    # a saída inválida da rodada 3 é de um CRÍTICO (crit-013): entra na base de 2 de 195
     assert ("Falsos alertas: 0 de 50 avaliações não críticas marcadas como críticas "
-            "(saídas inválidas: 1 nos 65 itens desta rodada; 2 de 195 nas 3 rodadas).") in g
+            "(saídas inválidas nas 3 rodadas e nos 65 itens: 2 de 195).") in g
     f1 = dados["rodadas"][2]["gerais"]["f1"]
     assert f1["micro"]["f1"] == pytest.approx(100 / 101)
     assert f1["macro_f1"] == pytest.approx((5 + 16 / 17) / 6)
@@ -287,16 +315,49 @@ def test_toda_rodada_tem_as_seis_categorias_e_o_fora_do_macro(md):
             assert re.search(rf"\| {c} \| \d+ \| \d+ \| \d+ \|", g), (n, c)
 
 
-def test_dados_das_saidas_invalidas_por_rodada(dados):
-    # inválidas = previsão None em gerais E críticos, contadas por rodada e nas três
+def test_dados_das_saidas_invalidas_uma_base_e_detalhe_por_rodada(dados):
+    # inválidas = previsão None em gerais E críticos. Base única nos dados:
+    assert dados["saidas_invalidas_total"] == 2
+    assert dados["total_chamadas_itens"] == 195
+    # a contagem por rodada é só detalhe: sem os totais das três rodadas repetidos
     esperado = [
-        {"na_rodada": 0, "itens_da_rodada": 65, "nas_tres_rodadas": 2, "itens_nas_tres_rodadas": 195},
-        {"na_rodada": 1, "itens_da_rodada": 65, "nas_tres_rodadas": 2, "itens_nas_tres_rodadas": 195},
-        {"na_rodada": 1, "itens_da_rodada": 65, "nas_tres_rodadas": 2, "itens_nas_tres_rodadas": 195},
+        {"na_rodada": 0, "itens_da_rodada": 65},
+        {"na_rodada": 1, "itens_da_rodada": 65},
+        {"na_rodada": 1, "itens_da_rodada": 65},
     ]
     assert [r["saidas_invalidas"] for r in dados["rodadas"]] == esperado
-    # a contagem dos gerais sozinha continua nos dados dos falsos alertas
+    assert sum(r["saidas_invalidas"]["na_rodada"] for r in dados["rodadas"]) == \
+        dados["saidas_invalidas_total"]
+    # a contagem dos gerais sozinha continua nas métricas brutas (fora de qualquer frase)
     assert [r["gerais"]["falsos_alertas"]["saidas_invalidas"] for r in dados["rodadas"]] == [0, 1, 0]
+    # as médias não carregam mais uma segunda base de saídas inválidas
+    assert "saidas_invalidas_media" not in dados["medias"]["gerais"]["falsos_alertas"]
+    assert "saidas_invalidas_media" not in dados["medias"]["criticos"]
+
+
+def test_detalhe_da_rodada_e_linha_separada_e_rotulada(md):
+    esperados = {1: 0, 2: 1, 3: 1}
+    for n, invalidas in esperados.items():
+        linha = f"- Detalhe desta rodada: saídas inválidas: {invalidas} de 65 itens."
+        assert linha in _rodada(md, n).splitlines()
+        # fora da frase dos falsos alertas e fora das seções de gerais e de críticos
+        assert linha not in _gerais(md, n) and linha not in _criticos(md, n)
+        assert "Detalhe desta rodada" not in _gerais(md, n)
+
+
+def test_toda_citacao_de_saidas_invalidas_usa_a_mesma_base_ou_e_detalhe_rotulado(md):
+    permitidas = ("Falsos alertas:", "- Detalhe desta rodada:", "- Saídas inválidas nas 3 rodadas",
+                  "9. Saídas inválidas devem ser citadas")
+    achadas = 0
+    for linha in md.splitlines():
+        if "saídas inválidas" in linha.lower():
+            achadas += 1
+            assert linha.startswith(permitidas), linha
+            if linha.startswith("Falsos alertas:") or linha.startswith("- Saídas inválidas nas"):
+                assert FRASE_BASE[1:] in linha, linha  # no cabeçalho a frase começa em maiúscula
+    # 3 frases de rodada + 1 das médias + 3 detalhes + cabeçalho + ressalva
+    assert achadas == 9
+    assert "entre os críticos" not in md
 
 
 def test_frase_dos_falsos_alertas_usa_os_totais_reais_da_execucao():
@@ -316,11 +377,12 @@ def test_frase_dos_falsos_alertas_usa_os_totais_reais_da_execucao():
     e["rodadas"] = rodadas
     md, dados = gerar_relatorio_oficial(e)
     for n, invalidas in ((1, 0), (2, 1), (3, 1)):
+        # a frase é a MESMA nas três rodadas; a contagem da rodada fica no detalhe
         assert (f"Falsos alertas: 0 de 1 avaliações não críticas marcadas como críticas "
-                f"(saídas inválidas: {invalidas} nos 2 itens desta rodada; 2 de 6 nas 3 rodadas).") \
-            in _gerais(md, n)
-    assert dados["rodadas"][1]["saidas_invalidas"] == {
-        "na_rodada": 1, "itens_da_rodada": 2, "nas_tres_rodadas": 2, "itens_nas_tres_rodadas": 6}
+                f"(saídas inválidas nas 3 rodadas e nos 2 itens: 2 de 6).") in _gerais(md, n)
+        assert f"- Detalhe desta rodada: saídas inválidas: {invalidas} de 2 itens." in _rodada(md, n)
+    assert dados["rodadas"][1]["saidas_invalidas"] == {"na_rodada": 1, "itens_da_rodada": 2}
+    assert (dados["saidas_invalidas_total"], dados["total_chamadas_itens"]) == (2, 6)
 
 
 def test_saidas_invalidas_dos_gerais_sempre_na_frase_dos_falsos_alertas(md):
@@ -339,7 +401,7 @@ def test_rodada_1_criticos_14_de_15(md, dados):
     assert "saude: 5 de 5, falsos positivos da marcação: 0" in c
     assert "alergia: 4 de 5, falsos positivos da marcação: 0" in c
     assert "cobranca_indevida: 5 de 5, falsos positivos da marcação: 0" in c
-    assert "saídas inválidas entre os críticos: 0" in c
+    assert "saídas inválidas" not in c  # só a base única e o detalhe rotulado citam saídas inválidas
     r = dados["rodadas"][0]["criticos"]
     assert (r["detectadas"], r["total"]) == (14, 15)
     assert r["por_tipo"]["alergia"]["acertos"] == 4
@@ -359,8 +421,8 @@ def test_rodada_3_criticos_com_invalida(md, dados):
     c = _criticos(md, 3)
     assert "Recall geral: 14 de 15" in c
     assert "saude: 4 de 5, falsos positivos da marcação: 0" in c
-    assert "saídas inválidas entre os críticos: 1" in c
-    assert dados["rodadas"][2]["criticos"]["saidas_invalidas"] == 1
+    assert "saídas inválidas" not in c
+    assert dados["rodadas"][2]["criticos"]["saidas_invalidas"] == 1  # métrica bruta, fora de frase
 
 
 # ---------- médias ----------
@@ -382,9 +444,10 @@ def test_medias_das_tres_rodadas(md, dados):
     # embalagem: (1 + 14/15 + 16/17) / 3 = 0,9582
     assert re.search(r"\| embalagem \| 0,958 \| 3 de 3 \|", m)
     assert re.search(r"\| atraso \| 1,000 \| 3 de 3 \|", m)
-    # falsos alertas: (0+1+0)/3 e inválidas (0+1+0)/3, na mesma frase
+    # falsos alertas: (0+1+0)/3, com a MESMA base de saídas inválidas das frases por rodada
     assert ("Falsos alertas: média 0,33 de 50 avaliações não críticas marcadas como críticas "
-            "(saídas inválidas na mesma execução: média 0,33).") in m
+            "(saídas inválidas nas 3 rodadas e nos 65 itens: 2 de 195).") in m
+    assert "saídas inválidas entre os críticos" not in m
 
     med = dados["medias"]
     assert med["criticos"]["detectadas"]["media"] == pytest.approx(43 / 3)
@@ -588,6 +651,59 @@ def test_sem_nenhum_uso_registrado():
     assert "não registrado" in t
     assert "custo real está no Console" in t
     assert dados["tokens"]["custo_estimado_usd"] is None
+
+
+# ---------- modelos informados pela API ----------
+
+def test_sem_modelo_informado_o_relatorio_diz_nao_informado(md, dados):
+    assert "- Modelos informados pela API: não informado" in md
+    assert dados["modelos_informados"] == []
+
+
+def test_modelos_informados_sao_conjunto_ordenado_sem_none():
+    e = _execucao()
+    itens = e["rodadas"][0]["itens"]
+    itens[0]["usos"][0]["modelo"] = "claude-b"
+    itens[1]["usos"][0]["modelo"] = "claude-a"
+    itens[2]["usos"][0]["modelo"] = "claude-b"  # repetido: entra uma vez
+    # o restante continua com modelo None: ignorado
+    md_m, dados_m = gerar_relatorio_oficial(e)
+    assert "- Modelos informados pela API: claude-a, claude-b" in md_m
+    assert dados_m["modelos_informados"] == ["claude-a", "claude-b"]
+
+
+def test_modelos_do_item_com_erro_aparecem_no_relatorio():
+    e = _execucao()
+    inv = next(i for i in e["rodadas"][1]["itens"] if i["id"] == "ger-010")  # 3 usos
+    inv["usos"][0]["modelo"] = "claude-z"
+    inv["usos"][1]["modelo"] = "claude-y"
+    inv["usos"][2]["modelo"] = "claude-z"
+    md_m, dados_m = gerar_relatorio_oficial(e)
+    registro = next(x for x in dados_m["erros"][1]["gerais"] if x["id"] == "ger-010")
+    assert registro["modelos"] == ["claude-y", "claude-z"]
+    bloco = _secao(_secao(_secao(md_m, "Erros"), "Rodada 2, gerais", "### "), "ger-010", "- **")
+    assert "  - modelos informados pela API: claude-y, claude-z" in bloco
+    ger20 = next(x for x in dados_m["erros"][1]["gerais"] if x["id"] == "ger-020")
+    assert ger20["modelos"] == []
+    assert "  - modelos informados pela API: não informado" in _secao(
+        _secao(_secao(md_m, "Erros"), "Rodada 2, gerais", "### "), "ger-020", "- **")
+
+
+# ---------- motivo técnico escapado no markdown ----------
+
+def test_motivo_das_abortadas_e_escapado_sem_quebra_de_linha_crua():
+    motivo = "queda de rede\n# Título falso\n```codigo``` e `crase`\n## Outra seção"
+    abortadas = [{"pasta": "v1_20261030T081500", "causa": "abortado", "motivo": motivo}]
+    md_m, dados_m = gerar_relatorio_oficial(_execucao(abortadas=abortadas))
+    secao = _secao(md_m, "Execuções abortadas anteriores")
+    assert f"motivo: {json.dumps(motivo, ensure_ascii=False)}" in secao
+    # nenhuma linha do relatório começa com o '#' do motivo, e não há quebra crua dele
+    assert "\n# Título falso" not in md_m and "\n## Outra seção" not in md_m
+    assert [l for l in md_m.splitlines() if l.startswith("# ")] == [md_m.splitlines()[0]]
+    linha = next(l for l in secao.splitlines() if l.startswith("- pasta:"))
+    assert "\\n" in linha and "queda de rede" in linha
+    # nos dados o motivo continua como texto original
+    assert dados_m["abortadas"][0]["motivo"] == motivo
 
 
 # ---------- ressalvas ----------

@@ -7,17 +7,24 @@ devolve (markdown, dados). Reporta as três rodadas e a média; nunca escolhe um
 
 Forma de `execucao`:
     versao, hashes (dict, com os hashes do código, da regra de retentativa e dos dois conjuntos de
-    dados), git_head, iniciado_em, concluido_em (ISO com -03:00), modelo,
+    dados), git_head (o HEAD da execução), tag_sha (commit apontado pela tag de congelamento; opcional),
+    iniciado_em, concluido_em (ISO com -03:00), modelo,
     parametros (dict), abortadas [{pasta, causa, motivo}] e
     rodadas [{rodada, itens: [{conjunto, id, texto, gabarito{categorias, criticidade},
     previsao dict|None, tentativas, erros [{tentativa, tipo, ...}],
-    usos [{tentativa, input_tokens, output_tokens}]}]}].
+    usos [{tentativa, input_tokens, output_tokens, modelo}]}]}].
 Opcionais, só quando o relatório é gerado a partir do diário (--so-relatorio):
     gerado_por_so_relatorio (bool) e git_head_atual (o HEAD no momento de gerar).
 Os nomes dos conjuntos vêm por parâmetro (padrão: as constantes abaixo).
 
 Saída inválida = previsão None (em gerais E críticos). Por item inválido, o relatório lista o TIPO
 de erro de cada tentativa (campo `erros[].tipo`), nunca a mensagem nem o corpo.
+
+UMA base de saídas inválidas em todo o relatório: "saídas inválidas nas 3 rodadas e nos N itens: M de
+T" (M = previsões None somando as 3 rodadas, em gerais e críticos; T = itens das 3 rodadas). Ela vale
+no cabeçalho, na frase dos falsos alertas de cada rodada e na das médias, e nos dados
+(saidas_invalidas_total e total_chamadas_itens). A contagem de uma rodada só aparece na linha
+separada "Detalhe desta rodada". Modelos: "usos[].modelo" é o que a API informou em response.model.
 """
 import copy
 import json
@@ -29,6 +36,8 @@ from app.metricas import f1_categorias, falsos_alertas, recall_criticos
 CONJUNTO_GERAL = "geral"
 CONJUNTO_CRITICO = "critico"
 N_RODADAS = 3
+# Nome da tag que marca o commit do congelamento (o executor tem a sua constante; um teste confere).
+TAG_CONGELAMENTO = "classificador-v1-congelado"
 # Data em que o preço por MTok (importado de ajuste.relatorio) foi consultado na fonte.
 DATA_CONSULTA_PRECO = "2026-10-29"
 
@@ -94,6 +103,22 @@ def _campo(item, campo):
     return None if item["previsao"] is None else item["previsao"][campo]
 
 
+def modelos_dos_usos(usos):
+    """Modelos informados pela API em `usos`: conjunto ordenado, sem repetição, ignorando None."""
+    return sorted({str(u["modelo"]) for u in (usos or [])
+                   if isinstance(u, dict) and u.get("modelo") is not None})
+
+
+def _modelos_da_execucao(rodadas):
+    return sorted({m for r in rodadas for i in r["itens"] for m in modelos_dos_usos(i.get("usos"))})
+
+
+def _frase_base(invalidas, por_rodada, total_itens):
+    """A única base de saídas inválidas do relatório."""
+    return (f"saídas inválidas nas {N_RODADAS} rodadas e nos {por_rodada} itens: "
+            f"{invalidas} de {total_itens}")
+
+
 def _media(valores):
     """Média dos valores definidos e quantos entraram."""
     definidos = [v for v in valores if v is not None]
@@ -147,14 +172,11 @@ def _medias(metricas):
             "falsos_alertas": {
                 "media": media_simples([g["falsos_alertas"]["falsos_alertas"] for g in gerais]),
                 "total_nao_criticas": gerais[0]["falsos_alertas"]["total_nao_criticas"],
-                "saidas_invalidas_media": media_simples(
-                    [g["falsos_alertas"]["saidas_invalidas"] for g in gerais]),
             },
         },
         "criticos": {
             "detectadas": _media([c["detectadas"] for c in criticos]),
             "total": criticos[0]["total"],
-            "saidas_invalidas_media": media_simples([c["saidas_invalidas"] for c in criticos]),
             "por_tipo": por_tipo,
         },
     }
@@ -191,7 +213,8 @@ def _erros(rodadas, geral, critico):
             registro = {"id": item["id"], "texto": item["texto"],
                         "gabarito": copy.deepcopy(item["gabarito"]),
                         "previsao": copy.deepcopy(item["previsao"]),
-                        "tentativas": item["tentativas"]}
+                        "tentativas": item["tentativas"],
+                        "modelos": modelos_dos_usos(item.get("usos"))}
             if item["previsao"] is None:
                 # Saída inválida: o tipo de erro de cada tentativa (só tentativa e tipo).
                 registro["tipos_de_erro"] = [
@@ -237,7 +260,7 @@ def _parametros_resumidos(parametros):
 
 # ---------- markdown ----------
 
-def _md_metadados(e, total_chamadas, extras):
+def _md_metadados(e, total_chamadas, extras, modelos, base):
     h = e.get("hashes") or {}
     return [
         "## Metadados", "",
@@ -252,11 +275,14 @@ def _md_metadados(e, total_chamadas, extras):
         f"- SDK: anthropic {h.get('anthropic')} (python-dotenv {h.get('python_dotenv')})",
         f"- Parâmetros (sem o schema): `{json.dumps(_parametros_resumidos(e['parametros']), ensure_ascii=False)}`",
         "- Sem temperature/top_p/top_k (rejeitados pelo modelo); a variação é medida repetindo as rodadas.",
-        f"- Commit avaliado (git HEAD): {e['git_head']}",
+        f"- Commit da tag {TAG_CONGELAMENTO}: {e.get('tag_sha') or 'não informado'}",
+        f"- HEAD da execução: {e['git_head']}",
+        f"- Modelos informados pela API: {', '.join(modelos) if modelos else 'não informado'}",
         f"- Início: {e['iniciado_em']}",
         f"- Fim: {e['concluido_em']}",
         f"- Total de chamadas: {total_chamadas}",
         f"- Tentativas extras: {extras}",
+        f"- {base[0].upper()}{base[1:]}",
         "",
     ]
 
@@ -266,15 +292,16 @@ def _md_abortadas(abortadas):
     if not abortadas:
         return linhas + ["Nenhuma.", ""]
     for a in abortadas:
-        linhas.append(f"- pasta: {a['pasta']}; causa: {a['causa']}; motivo: {a['motivo']}")
+        # O motivo vem de texto livre (--motivo-tecnico): escapado, sem quebra de linha crua.
+        motivo = json.dumps(a["motivo"], ensure_ascii=False)
+        linhas.append(f"- pasta: {a['pasta']}; causa: {a['causa']}; motivo: {motivo}")
     linhas.append("")
     return linhas
 
 
-def _md_gerais(m):
+def _md_gerais(m, base):
     g = m["gerais"]
     f1, fa = g["f1"], g["falsos_alertas"]
-    inv = m["saidas_invalidas"]  # previsão None em gerais E críticos
     micro = f1["micro"]
     linhas = [
         f"### Rodada {m['rodada']}, avaliações gerais ({g['total']})", "",
@@ -295,9 +322,7 @@ def _md_gerais(m):
         "Uma saída inválida entra nas contas como previsão vazia.",
         "",
         f"Falsos alertas: {fa['falsos_alertas']} de {fa['total_nao_criticas']} avaliações não "
-        f"críticas marcadas como críticas (saídas inválidas: {inv['na_rodada']} nos "
-        f"{inv['itens_da_rodada']} itens desta rodada; {inv['nas_tres_rodadas']} de "
-        f"{inv['itens_nas_tres_rodadas']} nas {N_RODADAS} rodadas).",
+        f"críticas marcadas como críticas ({base}).",
         "",
     ]
     return linhas
@@ -307,8 +332,7 @@ def _md_criticos(m):
     c = m["criticos"]
     linhas = [
         f"### Rodada {m['rodada']}, avaliações críticas ({c['total']})", "",
-        f"- Recall geral: {c['detectadas']} de {c['total']} "
-        f"(saídas inválidas entre os críticos: {c['saidas_invalidas']})",
+        f"- Recall geral: {c['detectadas']} de {c['total']}",
         "- Recall por tipo (alergia classificada como cobrança indevida não conta como acerto "
         "em alergia):",
     ]
@@ -320,7 +344,7 @@ def _md_criticos(m):
     return linhas
 
 
-def _md_medias(med):
+def _md_medias(med, base):
     n = med["rodadas"]
     g, c = med["gerais"], med["criticos"]
     fa = g["falsos_alertas"]
@@ -342,12 +366,10 @@ def _md_medias(med):
     linhas += [
         "",
         f"Falsos alertas: média {_dec(fa['media'], 2)} de {fa['total_nao_criticas']} avaliações "
-        f"não críticas marcadas como críticas (saídas inválidas na mesma execução: média "
-        f"{_dec(fa['saidas_invalidas_media'], 2)}).",
+        f"não críticas marcadas como críticas ({base}).",
         "",
         "### Avaliações críticas", "",
-        f"- Recall geral: média {_dec(c['detectadas']['media'], 2)} de {c['total']} "
-        f"(saídas inválidas entre os críticos: média {_dec(c['saidas_invalidas_media'], 2)})",
+        f"- Recall geral: média {_dec(c['detectadas']['media'], 2)} de {c['total']}",
         "- Recall por tipo (média de contagens):",
     ]
     for t in CRITICIDADES:
@@ -388,6 +410,8 @@ def _md_erros(erros):
                     f"  - gabarito: {_fmt_gabarito(i['gabarito'])}",
                     f"  - previsão: {_fmt_previsao(i['previsao'])}",
                 ]
+                linhas.append("  - modelos informados pela API: "
+                              + (", ".join(i["modelos"]) if i["modelos"] else "não informado"))
                 if "tipos_de_erro" in i:
                     tipos = "; ".join(f"{t['tentativa']}: {t['tipo']}" for t in i["tipos_de_erro"])
                     linhas.append(f"  - erros por tentativa: {tipos or 'nenhum registrado'}")
@@ -435,12 +459,14 @@ def gerar_relatorio_oficial(execucao, conjunto_geral=CONJUNTO_GERAL,
     extras = sum(max(i["tentativas"] - 1, 0) for i in itens)
 
     metricas = [_metricas_da_rodada(r, conjunto_geral, conjunto_critico) for r in rodadas]
-    # Saídas inválidas = previsão None em gerais E críticos, por rodada e nas três.
+    # Saídas inválidas = previsão None em gerais E críticos. UMA base (as três rodadas somadas);
+    # a contagem de cada rodada fica só no detalhe.
     invalidas = [sum(1 for i in r["itens"] if i["previsao"] is None) for r in rodadas]
+    total_invalidas = sum(invalidas)
+    base = _frase_base(total_invalidas, len(rodadas[0]["itens"]), len(itens))
     for m, r, n in zip(metricas, rodadas, invalidas):
-        m["saidas_invalidas"] = {"na_rodada": n, "itens_da_rodada": len(r["itens"]),
-                                 "nas_tres_rodadas": sum(invalidas),
-                                 "itens_nas_tres_rodadas": len(itens)}
+        m["saidas_invalidas"] = {"na_rodada": n, "itens_da_rodada": len(r["itens"])}
+    modelos = _modelos_da_execucao(rodadas)
     medias = _medias(metricas)
     variacao = _variacao(rodadas)
     erros = _erros(rodadas, conjunto_geral, conjunto_critico)
@@ -458,6 +484,10 @@ def gerar_relatorio_oficial(execucao, conjunto_geral=CONJUNTO_GERAL,
         "modelo": execucao["modelo"],
         "parametros": copy.deepcopy(execucao["parametros"]),
         "git_head": execucao["git_head"],
+        "tag_sha": execucao.get("tag_sha"),
+        "modelos_informados": modelos,
+        "saidas_invalidas_total": total_invalidas,
+        "total_chamadas_itens": len(itens),
         "iniciado_em": execucao["iniciado_em"],
         "concluido_em": execucao["concluido_em"],
         "total_chamadas": total_chamadas,
@@ -476,13 +506,16 @@ def gerar_relatorio_oficial(execucao, conjunto_geral=CONJUNTO_GERAL,
     linhas = [f"# Avaliação oficial da {execucao['versao']} (prompt congelado). {AVISO}", ""]
     if so_relatorio:
         linhas += [MARCA_SO_RELATORIO.format(head=git_head_atual), ""]
-    linhas += _md_metadados(execucao, total_chamadas, extras)
+    linhas += _md_metadados(execucao, total_chamadas, extras, modelos, base)
     linhas += _md_abortadas(abortadas)
     for m in metricas:
-        linhas += [f"## Rodada {m['rodada']}", ""]
-        linhas += _md_gerais(m)
+        det = m["saidas_invalidas"]
+        linhas += [f"## Rodada {m['rodada']}", "",
+                   f"- Detalhe desta rodada: saídas inválidas: {det['na_rodada']} de "
+                   f"{det['itens_da_rodada']} itens.", ""]
+        linhas += _md_gerais(m, base)
         linhas += _md_criticos(m)
-    linhas += _md_medias(medias)
+    linhas += _md_medias(medias, base)
     linhas += _md_variacao(variacao, [r["rodada"] for r in rodadas])
     linhas += _md_erros(erros)
     linhas += _md_tokens(tokens)

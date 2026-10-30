@@ -41,6 +41,9 @@ GIT_ALTERACOES_REAL = ro.git_alteracoes
 CONFERIR_TAG_REAL = ro.conferir_tag
 
 HEAD_FALSO = "cafe0123456789abcdef0123456789abcdef0123"
+TAG_SHA_FALSO = "7a9e1b2c3d4e5f60718293a4b5c6d7e8f9012345"
+MODELO_FALSO = "claude-falso-1"  # o que a API "informa" em response.model nos testes
+MSG_ORFAO = "relatório presente (possivelmente incompleto): confira manualmente; não sobrescrevo"
 MSG_ABORTO = "Execução abortada; nenhum resultado parcial foi exibido. Diário preservado.\n"
 
 
@@ -64,6 +67,7 @@ class Resposta:
         self.stop_reason = stop_reason
         self._request_id = "req_falso"
         self.usage = Uso()
+        self.model = MODELO_FALSO
 
 
 class ClienteEspelho:
@@ -156,7 +160,8 @@ def isolar(monkeypatch, tmp_path):
     monkeypatch.setattr(ro, "ARQUIVO_LOCK", base / "resultados" / "v1.lock")
     monkeypatch.setattr(ro, "git_head", lambda raiz=None: HEAD_FALSO)
     monkeypatch.setattr(ro, "git_alteracoes", lambda raiz=None: [])
-    monkeypatch.setattr(ro, "conferir_tag", lambda raiz=None: None)  # tag "confere" por padrão
+    # tag "confere" por padrão e devolve o SHA do commit da tag
+    monkeypatch.setattr(ro, "conferir_tag", lambda raiz=None: TAG_SHA_FALSO)
     criados = []
     monkeypatch.setattr(ro, "criar_cliente", lambda: criados.append(1) or pytest.fail("cliente real"))
     # Garantia: nada aponta para dentro do repositório real.
@@ -236,6 +241,8 @@ def test_constantes_padrao_do_modulo():
     assert (PADROES["RODADAS"], PADROES["N_GERAL"], PADROES["N_CRITICO"]) == (3, 50, 15)
     assert PADROES["CUSTO_ESTIMADO_POR_CHAMADA"] == pytest.approx(0.4486 / 60)
     assert PADROES["TAG_CONGELAMENTO"] == "classificador-v1-congelado"
+    from avaliacao import relatorio_oficial
+    assert relatorio_oficial.TAG_CONGELAMENTO == PADROES["TAG_CONGELAMENTO"]  # nome citado no relatório
     assert PADROES["ARQUIVOS_CONGELADOS"] == ["app/classificador.py", "app/contrato.py",
                                               "app/metricas.py"]
 
@@ -394,6 +401,37 @@ def test_recusa_sobrescrever_relatorio_existente(monkeypatch, clientes_criados, 
     assert not ro.PASTA_ABORTADAS.exists()
 
 
+@pytest.mark.parametrize("fluxo", [["--executar"], ["--so-relatorio"]])
+@pytest.mark.parametrize("existente", ["relatorio.json", "relatorio.md"])
+def test_relatorio_orfao_sai_4_com_mensagem_de_conferir_manualmente(
+        existente, fluxo, monkeypatch, clientes_criados, capsys):
+    # Só UM dos dois arquivos existe: a mensagem não pode dizer "avaliação concluída".
+    preparar(monkeypatch, clientes_criados)
+    ro.PASTA_RESULTADOS.mkdir(parents=True)
+    (ro.PASTA_RESULTADOS / existente).write_text("parcial", encoding="utf-8")
+    clientes_criados.clear()
+    capsys.readouterr()
+    assert ro.main(fluxo) == 4
+    err = capsys.readouterr().err
+    assert MSG_ORFAO in err
+    assert "avaliação concluída" not in err
+    assert (ro.PASTA_RESULTADOS / existente).read_text(encoding="utf-8") == "parcial"
+    assert clientes_criados == [] and not ro.ARQUIVO_LOCK.exists()
+
+
+@pytest.mark.parametrize("fluxo", [["--executar"], ["--so-relatorio"]])
+def test_relatorio_completo_continua_dizendo_avaliacao_concluida(
+        fluxo, monkeypatch, clientes_criados, capsys):
+    preparar(monkeypatch, clientes_criados)
+    ro.PASTA_RESULTADOS.mkdir(parents=True)
+    for nome in ("relatorio.json", "relatorio.md"):
+        (ro.PASTA_RESULTADOS / nome).write_text("antigo", encoding="utf-8")
+    capsys.readouterr()
+    assert ro.main(fluxo) == 4
+    err = capsys.readouterr().err
+    assert "avaliação concluída" in err and MSG_ORFAO not in err
+
+
 def test_diario_sem_relatorio_exige_motivo_tecnico(monkeypatch, clientes_criados, capsys):
     preparar(monkeypatch, clientes_criados)
     ro.PASTA_RESULTADOS.mkdir(parents=True)
@@ -459,7 +497,7 @@ def test_tag_vem_antes_de_recusar_sobrescrever_relatorio(monkeypatch, clientes_c
 
 def test_hashes_e_git_vem_antes_da_tag(monkeypatch, clientes_criados):
     chamadas = []
-    monkeypatch.setattr(ro, "conferir_tag", lambda raiz=None: chamadas.append(1))
+    monkeypatch.setattr(ro, "conferir_tag", lambda raiz=None: chamadas.append(1) or TAG_SHA_FALSO)
     gravar_registro(alterar={"modelo": "outro"})
     assert ro.main(["--executar"]) == 2
     gravar_registro()
@@ -470,7 +508,7 @@ def test_hashes_e_git_vem_antes_da_tag(monkeypatch, clientes_criados):
 
 def test_com_executar_a_tag_e_conferida_uma_vez_sobre_o_repositorio(monkeypatch, clientes_criados):
     chamadas = []
-    monkeypatch.setattr(ro, "conferir_tag", lambda raiz=None: chamadas.append(raiz))
+    monkeypatch.setattr(ro, "conferir_tag", lambda raiz=None: chamadas.append(raiz) or TAG_SHA_FALSO)
     preparar(monkeypatch, clientes_criados)
     assert ro.main(["--executar"]) == 0
     assert len(chamadas) == 1
@@ -926,14 +964,17 @@ def test_execucao_completa_feliz(monkeypatch, clientes_criados, capsys, esperas)
     assert [l["tipo"] for l in linhas] == ["inicio"] + ["item"] * 195 + ["fim"]
     inicio, fim = linhas[0], linhas[-1]
     assert inicio["versao"] == "v1" and inicio["git_head"] == HEAD_FALSO
+    assert inicio["tag_sha"] == TAG_SHA_FALSO  # commit apontado pela tag, além do git_head
     assert inicio["iniciado_em"].endswith("-03:00")
     for chave, valor in {**hashes_atuais("v1"), **hashes_dos_dados_falsos()}.items():
         assert inicio[chave] == valor  # inclui regra de retentativa e os dois hashes dos dados
     assert fim["status"] == "concluido" and fim["concluido_em"].endswith("-03:00")
     item = linhas[1]
     assert set(item) == {"tipo", "rodada", "conjunto", "id", "texto", "gabarito", "previsao",
-                         "tentativas", "erros", "usos"}
-    assert item["usos"] == [{"tentativa": 1, "input_tokens": 2500, "output_tokens": 40}]
+                         "tentativas", "erros", "usos", "modelos"}
+    assert item["usos"] == [{"tentativa": 1, "input_tokens": 2500, "output_tokens": 40,
+                             "modelo": MODELO_FALSO}]
+    assert item["modelos"] == [MODELO_FALSO]  # conjunto ordenado dos modelos informados pela API
 
     # ordem: rodada -> geral -> crítico
     esperada = []
@@ -952,6 +993,13 @@ def test_execucao_completa_feliz(monkeypatch, clientes_criados, capsys, esperas)
         assert dados["hashes"][chave] == valor
     assert hashes_dos_dados_falsos()["dados_geral_sha256"] in md
     assert dados["gerado_por_so_relatorio"] is False and "so-relatorio" not in md
+    # commit da tag, HEAD da execução e modelos informados pela API no relatório
+    assert dados["tag_sha"] == TAG_SHA_FALSO and dados["git_head"] == HEAD_FALSO
+    assert f"- Commit da tag classificador-v1-congelado: {TAG_SHA_FALSO}" in md
+    assert f"- HEAD da execução: {HEAD_FALSO}" in md
+    assert dados["modelos_informados"] == [MODELO_FALSO]
+    assert f"- Modelos informados pela API: {MODELO_FALSO}" in md
+    assert dados["saidas_invalidas_total"] == 0 and dados["total_chamadas_itens"] == 195
     assert not ro.ARQUIVO_LOCK.exists()
     assert esperas == []  # nenhuma retentativa, nenhuma espera
 
@@ -1400,6 +1448,9 @@ def test_so_relatorio_gera_o_mesmo_relatorio_do_fluxo_normal(monkeypatch, client
     marca = MARCA_SO_RELATORIO.format(head=head_atual)
     assert marca in md
     assert md.replace(marca + "\n\n", "") == md_normal
+    # o tag_sha e o HEAD da execução vêm do diário; o HEAD atual só aparece na marca
+    assert dados["tag_sha"] == dados_normal["tag_sha"] == TAG_SHA_FALSO
+    assert f"- HEAD da execução: {HEAD_FALSO}" in md and head_atual not in md_normal
     # sem lixo, sem lock, sem pasta de abortadas
     assert _sem_sobras(ro.PASTA_RESULTADOS)
     assert not ro.ARQUIVO_LOCK.exists() and not ro.PASTA_ABORTADAS.exists()
@@ -1464,6 +1515,8 @@ VARIANTES_INVALIDAS = {
         L, 4, previsao={"categorias": ["inventada"], "criticidade": []}),
     "versao_diferente": lambda L: _trocar(L, 0, versao="v2"),
     "inicio_sem_git_head": lambda L: _sem_a_chave(L, 0, "git_head"),
+    "inicio_sem_tag_sha": lambda L: _sem_a_chave(L, 0, "tag_sha"),
+    "tag_sha_do_diario_diferente_do_atual": lambda L: _trocar(L, 0, tag_sha="f" * 40),
     "inicio_sem_data": lambda L: _sem_a_chave(L, 0, "iniciado_em"),
     "fim_sem_data": lambda L: _sem_a_chave(L, -1, "concluido_em"),
 }
@@ -1521,19 +1574,101 @@ def test_so_relatorio_nunca_cria_cliente_nem_chama_api_nem_abre_dados(monkeypatc
     assert not ro.ARQUIVO_GERAL.exists() and not ro.ARQUIVO_CRITICO.exists()
 
 
-def test_so_relatorio_nao_exige_tag_mas_exige_hashes_e_git(monkeypatch, clientes_criados):
+def test_so_relatorio_aplica_as_mesmas_travas_hashes_git_e_depois_tag(monkeypatch, clientes_criados):
     diario_valido(monkeypatch, clientes_criados)
     bloquear_api_e_dados(monkeypatch)
-    monkeypatch.setattr(ro, "conferir_tag", lambda raiz=None: pytest.fail("tag não é conferida aqui"))
-    # travas a) e b) valem
+    consultas = []
+    monkeypatch.setattr(ro, "conferir_tag",
+                        lambda raiz=None: consultas.append(1) or TAG_SHA_FALSO)
+    # travas a) e b) vêm ANTES da tag: a tag nem é consultada
     monkeypatch.setattr(ro, "git_alteracoes", lambda raiz=None: [" M app/x.py"])
     assert ro.main(["--so-relatorio"]) == 3
     monkeypatch.setattr(ro, "git_alteracoes", lambda raiz=None: [])
     gravar_registro(alterar={"modelo": "outro"})
     assert ro.main(["--so-relatorio"]) == 2
-    # com tudo certo, passa sem consultar a tag
+    assert consultas == []
+    # com tudo certo, a tag é conferida (uma vez) e o relatório sai
     gravar_registro()
     assert ro.main(["--so-relatorio"]) == 0
+    assert consultas == [1]
+
+
+def test_so_relatorio_com_tag_que_falha_sai_7_com_a_mesma_mensagem_do_executar(
+        monkeypatch, clientes_criados, capsys):
+    diario_valido(monkeypatch, clientes_criados)
+    bloquear_api_e_dados(monkeypatch)
+    antes = (ro.PASTA_RESULTADOS / "diario.jsonl").read_bytes()
+    monkeypatch.setattr(ro, "conferir_tag", _tag_falha("app/classificador.py diferem da tag"))
+    capsys.readouterr()
+    assert ro.main(["--so-relatorio"]) == 7
+    err_so = capsys.readouterr().err
+    assert "A trava da tag classificador-v1-congelado falhou" in err_so
+    assert "Nada foi aberto nem chamado." in err_so
+    assert not (ro.PASTA_RESULTADOS / "relatorio.json").exists()
+    assert not (ro.PASTA_RESULTADOS / "relatorio.md").exists()
+    assert (ro.PASTA_RESULTADOS / "diario.jsonl").read_bytes() == antes
+    # --executar emite exatamente a mesma mensagem
+    assert ro.main(["--executar"]) == 7
+    assert capsys.readouterr().err == err_so
+
+
+def test_so_relatorio_tag_vem_antes_de_recusar_relatorio_existente(monkeypatch, clientes_criados):
+    diario_valido(monkeypatch, clientes_criados)
+    bloquear_api_e_dados(monkeypatch)
+    (ro.PASTA_RESULTADOS / "relatorio.md").write_text("antigo", encoding="utf-8")
+    monkeypatch.setattr(ro, "conferir_tag", _tag_falha())
+    assert ro.main(["--so-relatorio"]) == 7
+
+
+def test_dry_run_continua_sem_conferir_tag_mesmo_com_so_relatorio_conferindo(
+        monkeypatch, clientes_criados):
+    gravar_registro()
+    monkeypatch.setattr(ro, "conferir_tag", lambda raiz=None: pytest.fail("dry-run não confere tag"))
+    assert ro.main([]) == 0
+
+
+def test_so_relatorio_com_tag_sha_igual_ao_do_inicio_mostra_tag_head_da_execucao_e_head_atual(
+        monkeypatch, clientes_criados):
+    diario_valido(monkeypatch, clientes_criados)
+    bloquear_api_e_dados(monkeypatch)
+    head_atual = "9999aaaa" * 5
+    monkeypatch.setattr(ro, "git_head", lambda raiz=None: head_atual)
+    assert ro.main(["--so-relatorio"]) == 0
+    md = (ro.PASTA_RESULTADOS / "relatorio.md").read_text(encoding="utf-8")
+    dados = json.loads((ro.PASTA_RESULTADOS / "relatorio.json").read_text(encoding="utf-8"))
+    assert f"- Commit da tag classificador-v1-congelado: {TAG_SHA_FALSO}" in md
+    assert f"- HEAD da execução: {HEAD_FALSO}" in md  # o do diário
+    assert f"Commit atual (git HEAD): {head_atual}." in md  # o atual
+    assert dados["tag_sha"] == TAG_SHA_FALSO
+    assert dados["git_head"] == HEAD_FALSO and dados["git_head_atual"] == head_atual
+
+
+MSG_TAG_SHA_DIVERGE = ("o commit da tag classificador-v1-congelado mudou desde a execução "
+                       "(tag_sha do início do diário diferente do atual)")
+
+
+def test_so_relatorio_com_tag_movida_desde_a_execucao_sai_11_com_mensagem_fixa(
+        monkeypatch, clientes_criados, capsys):
+    diario_valido(monkeypatch, clientes_criados)  # o início grava TAG_SHA_FALSO
+    bloquear_api_e_dados(monkeypatch)
+    outro = "0123456789abcdef0123456789abcdef01234567"
+    monkeypatch.setattr(ro, "conferir_tag", lambda raiz=None: outro)
+    capsys.readouterr()
+    assert ro.main(["--so-relatorio"]) == 11
+    err = capsys.readouterr().err
+    assert MSG_TAG_SHA_DIVERGE in err
+    assert outro not in err and TAG_SHA_FALSO not in err  # mensagem fixa, sem os SHAs
+    assert not (ro.PASTA_RESULTADOS / "relatorio.json").exists()
+    assert not (ro.PASTA_RESULTADOS / "relatorio.md").exists()
+
+
+def test_so_relatorio_com_diario_sem_tag_sha_sai_11(monkeypatch, clientes_criados, capsys):
+    linhas, _, _ = diario_valido(monkeypatch, clientes_criados)
+    escrever_diario(_sem_a_chave(linhas, 0, "tag_sha"))
+    bloquear_api_e_dados(monkeypatch)
+    capsys.readouterr()
+    assert ro.main(["--so-relatorio"]) == 11
+    assert MSG_TAG_SHA_DIVERGE in capsys.readouterr().err
 
 
 def test_so_relatorio_compara_os_hashes_dos_dados_com_o_registro(monkeypatch, clientes_criados):
@@ -1748,22 +1883,34 @@ def _commit(repo, arquivo, conteudo="mudou\n", mensagem="muda"):
     _git(repo, "commit", "-q", "-m", mensagem)
 
 
-def test_conferir_tag_tudo_certo_passa(repo_tag):
+def _rev_parse(repo, ref):
+    return subprocess.run(["git", "rev-parse", ref], cwd=repo, check=True, capture_output=True,
+                          text=True).stdout.strip()
+
+
+def test_conferir_tag_tudo_certo_passa_e_devolve_o_sha_do_commit_da_tag(repo_tag):
     _git(repo_tag, "tag", ro.TAG_CONGELAMENTO)
-    assert CONFERIR_TAG_REAL(repo_tag) is None
+    sha = CONFERIR_TAG_REAL(repo_tag)
+    assert re.fullmatch(r"[0-9a-f]{40}", sha)
+    assert sha == _rev_parse(repo_tag, "HEAD")
 
 
-def test_conferir_tag_anotada_tambem_passa(repo_tag):
+def test_conferir_tag_anotada_tambem_passa_e_devolve_o_commit_nao_o_objeto_da_tag(repo_tag):
     _git(repo_tag, "tag", "-a", ro.TAG_CONGELAMENTO, "-m", "congelado")
-    assert CONFERIR_TAG_REAL(repo_tag) is None
+    sha = CONFERIR_TAG_REAL(repo_tag)
+    assert sha == _rev_parse(repo_tag, "HEAD")
+    # a tag anotada é um objeto próprio; o que se guarda é o commit apontado por ela
+    assert _rev_parse(repo_tag, f"refs/tags/{ro.TAG_CONGELAMENTO}") != sha
 
 
 def test_conferir_tag_passa_com_commits_depois_da_tag_em_outros_arquivos(repo_tag):
     _git(repo_tag, "tag", ro.TAG_CONGELAMENTO)
+    commit_da_tag = _rev_parse(repo_tag, "HEAD")
     _commit(repo_tag, "avaliacao/a.py")
     _commit(repo_tag, "docs/a.md")
     _commit(repo_tag, "app/outro.py")
-    assert CONFERIR_TAG_REAL(repo_tag) is None
+    sha = CONFERIR_TAG_REAL(repo_tag)
+    assert sha == commit_da_tag != _rev_parse(repo_tag, "HEAD")  # o da tag, não o HEAD
 
 
 def test_conferir_tag_inexistente_falha(repo_tag):
@@ -1806,9 +1953,10 @@ def test_conferir_tag_falha_se_arquivo_congelado_mudou_depois_da_tag(repo_tag, a
 def test_conferir_tag_arquivo_congelado_que_mudou_e_voltou_passa(repo_tag):
     # Mudou e foi revertido: o conteúdo na tag e no HEAD é igual, então a trava passa.
     _git(repo_tag, "tag", ro.TAG_CONGELAMENTO)
+    commit_da_tag = _rev_parse(repo_tag, "HEAD")
     _commit(repo_tag, "app/classificador.py", conteudo="outra coisa\n")
     _commit(repo_tag, "app/classificador.py", conteudo="original\n")
-    assert CONFERIR_TAG_REAL(repo_tag) is None
+    assert CONFERIR_TAG_REAL(repo_tag) == commit_da_tag
 
 
 def test_conferir_tag_fora_de_repositorio_falha(tmp_path):
@@ -1827,6 +1975,93 @@ def test_main_traduz_falha_da_tag_em_saida_7_mesmo_com_git_real(monkeypatch, cli
     _git(repo_tag, "tag", ro.TAG_CONGELAMENTO)
     preparar(monkeypatch, clientes_criados)
     assert ro.main(["--executar"]) == 0
+    assert linhas_do_diario()[0]["tag_sha"] == _rev_parse(repo_tag, "HEAD")
+
+
+def test_so_relatorio_com_git_real_detecta_a_tag_movida_depois_da_execucao(
+        monkeypatch, clientes_criados, repo_tag, capsys):
+    monkeypatch.setattr(ro, "conferir_tag", lambda raiz=None: CONFERIR_TAG_REAL(repo_tag))
+    _git(repo_tag, "tag", ro.TAG_CONGELAMENTO)
+    sha_da_execucao = _rev_parse(repo_tag, "HEAD")
+    linhas, _, _ = diario_valido(monkeypatch, clientes_criados)
+    assert linhas[0]["tag_sha"] == sha_da_execucao
+    bloquear_api_e_dados(monkeypatch)
+    # mesma tag: o relatório sai e cita o commit da tag
+    assert ro.main(["--so-relatorio"]) == 0
+    md = (ro.PASTA_RESULTADOS / "relatorio.md").read_text(encoding="utf-8")
+    assert f"- Commit da tag classificador-v1-congelado: {sha_da_execucao}" in md
+    (ro.PASTA_RESULTADOS / "relatorio.md").unlink()
+    (ro.PASTA_RESULTADOS / "relatorio.json").unlink()
+    # a tag é movida para um commit novo (arquivos congelados iguais, HEAD ainda descende): sai 11
+    _commit(repo_tag, "docs/a.md", mensagem="commit novo")
+    _git(repo_tag, "tag", "-f", ro.TAG_CONGELAMENTO)
+    capsys.readouterr()
+    assert ro.main(["--so-relatorio"]) == 11
+    assert MSG_TAG_SHA_DIVERGE in capsys.readouterr().err
+    assert not (ro.PASTA_RESULTADOS / "relatorio.md").exists()
+
+
+# ---------- ajuda do script: lista completa dos códigos de saída ----------
+
+def test_help_traz_a_lista_completa_dos_codigos_de_saida(capsys):
+    with pytest.raises(SystemExit) as exc:
+        ro.main(["--help"])
+    assert exc.value.code == 0
+    saida = " ".join(capsys.readouterr().out.split())  # quebras de linha viram espaço simples
+    esperados = {
+        "0": "ok ou dry-run",
+        "1": "aborto durante a execução OU falha ao gerar o relatório",
+        "2": "congelamento diverge (também é o erro de argumentos do argparse)",
+        "3": "alterações não commitadas ou git indisponível",
+        "4": "avaliação já concluída",
+        "5": "diário anterior sem --motivo-tecnico, motivo sem nada a arquivar, diário completo "
+             "(use --so-relatorio) ou falha ao arquivar",
+        "6": "conjunto inválido",
+        "7": "tag/ancestralidade/arquivos congelados",
+        "8": "hash dos dados diverge",
+        "9": "outra execução em andamento ou não foi possível criar o lock",
+        "10": "cliente não pôde ser criado",
+        "11": "--so-relatorio inválido",
+        "130": "Ctrl+C",
+    }
+    for codigo, descricao in esperados.items():
+        assert f"{codigo} {descricao}" in saida, codigo
+
+
+def test_help_nao_roda_nenhuma_trava(monkeypatch, clientes_criados):
+    chamadas = []
+    for nome in ("ler_congelamento", "hashes_atuais", "git_alteracoes", "git_head",
+                 "conferir_tag", "carregar_conjunto", "carregar_prompt"):
+        monkeypatch.setattr(ro, nome, lambda *a, _n=nome, **k: chamadas.append(_n))
+    with pytest.raises(SystemExit):
+        ro.main(["--help"])
+    assert chamadas == [] and clientes_criados == []
+
+
+def test_docstring_do_modulo_tem_a_mesma_lista_de_codigos():
+    doc = " ".join(ro.__doc__.split())
+    for trecho in ("1 aborto durante a execução OU falha ao gerar o relatório",
+                   "5 diário anterior sem --motivo-tecnico, motivo sem nada a arquivar, diário "
+                   "completo (use --so-relatorio) ou falha ao arquivar",
+                   "9 outra execução em andamento ou não foi possível criar o lock",
+                   "11 --so-relatorio inválido", "130 Ctrl+C"):
+        assert trecho in doc, trecho
+
+
+# ---------- --motivo-tecnico escapado no markdown ----------
+
+def test_motivo_tecnico_com_quebra_de_linha_cerquilha_e_crases_vai_escapado_ao_relatorio(
+        monkeypatch, clientes_criados):
+    preparar(monkeypatch, clientes_criados)
+    _diario_incompleto_no_lugar()
+    motivo = "queda de rede\n# Título falso\n```bloco``` e `crase`\n## Outra seção"
+    assert ro.main(["--executar", "--motivo-tecnico", motivo]) == 0
+    md = (ro.PASTA_RESULTADOS / "relatorio.md").read_text(encoding="utf-8")
+    dados = json.loads((ro.PASTA_RESULTADOS / "relatorio.json").read_text(encoding="utf-8"))
+    assert f"motivo: {json.dumps(motivo, ensure_ascii=False)}" in md
+    assert "\n# Título falso" not in md and "\n## Outra seção" not in md
+    assert [l for l in md.splitlines() if l.startswith("# ")] == [md.splitlines()[0]]
+    assert dados["abortadas"][0]["motivo"] == motivo  # nos dados, o texto original
 
 
 # ---------- separação dos conjuntos no código ----------

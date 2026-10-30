@@ -24,7 +24,10 @@ c) Sem --executar e sem --so-relatorio: imprime o dry-run e sai (0), sem abrir d
 d) Com --executar, nesta ordem:
    (i)   TAG classificador-v1-congelado: ela existe, o HEAD descende dela e app/classificador.py,
          app/contrato.py e app/metricas.py são idênticos aos da tag (saída 7). Sem abrir dados.
-   (ii)  Recusa sobrescrever avaliação concluída (saída 4).
+         O SHA do commit apontado pela tag (git rev-parse refs/tags/<tag>^{commit}) vai para a
+         linha "inicio" do diário (tag_sha, além de git_head) e para o relatório.
+   (ii)  Recusa sobrescrever relatório existente (saída 4): com os dois arquivos, "avaliação
+         concluída"; com só um deles, "relatório presente (possivelmente incompleto)".
    (iii) Se há v1.lock, outra execução pode estar em andamento (saída 9, sem tocar em nada).
    (iv)  Diário anterior: um diário completo e concluído sem relatório NÃO é aborto e não se
          arquiva (saída 5: use --so-relatorio); um diário incompleto ou abortado exige
@@ -47,26 +50,28 @@ tipo da exceção e, para a família ErroTecnicoDaAPI, status e request_id), nen
 e a saída é 1 (130 para Ctrl+C). Só quando as 3 rodadas terminam são gravados relatorio.json e,
 depois, relatorio.md (se um dos dois falhar, o que foi criado é removido).
 
---so-relatorio roda as travas (a) e (b) e NÃO abre dados, NÃO cria cliente e NÃO chama a API. Lê o
-diário e exige: início na primeira linha; exatamente 195 itens (3 rodadas x 65, na ordem rodada,
-gerais, críticos); exatamente uma linha final de fim concluído e nenhuma linha de aborto; hashes do
-início (código e dados) iguais aos atuais e registrados. O relatório sai marcado "gerado por
---so-relatorio", com o HEAD atual, e o commit avaliado continua sendo o do diário.
+--so-relatorio roda as MESMAS travas de --executar até a da tag: (a) hashes, (b) git e a TAG
+(saída 7, mesma função e mesma mensagem), nessa ordem. NÃO abre dados, NÃO cria cliente e NÃO chama
+a API. Lê o diário e exige: início na primeira linha; exatamente 195 itens (3 rodadas x 65, na
+ordem rodada, gerais, críticos); exatamente uma linha final de fim concluído e nenhuma linha de
+aborto; hashes do início (código e dados) iguais aos atuais e registrados; e tag_sha do início
+igual ao SHA atual do commit da tag (senão saída 11, mensagem fixa). O relatório sai marcado
+"gerado por --so-relatorio" e mostra o HEAD da execução (o do diário) e o HEAD atual.
 
 Códigos de saída:
     0 ok ou dry-run;
-    1 aborto durante a execução (inclui erro técnico esgotado e erro permanente da API);
-    2 congelamento diverge (ou erro de argparse: opção desconhecida, abreviada ou incompatível);
-    3 git sujo ou git indisponível;
-    4 avaliação já concluída (relatório presente);
-    5 diário anterior sem --motivo-tecnico, motivo sem diário, ou diário concluído (use
-      --so-relatorio);
-    6 conjunto de dados inválido;
-    7 tag de congelamento não confere;
-    8 hash dos dados diverge do registro;
-    9 v1.lock presente (outra execução em andamento ou lock órfão);
+    1 aborto durante a execução OU falha ao gerar o relatório;
+    2 congelamento diverge (também é o erro de argumentos do argparse);
+    3 alterações não commitadas ou git indisponível;
+    4 avaliação já concluída;
+    5 diário anterior sem --motivo-tecnico, motivo sem nada a arquivar, diário completo (use
+      --so-relatorio) ou falha ao arquivar;
+    6 conjunto inválido;
+    7 tag/ancestralidade/arquivos congelados;
+    8 hash dos dados diverge;
+    9 outra execução em andamento ou não foi possível criar o lock;
     10 cliente não pôde ser criado;
-    11 --so-relatorio com diário inválido;
+    11 --so-relatorio inválido;
     130 Ctrl+C.
 """
 import argparse
@@ -99,6 +104,7 @@ from avaliacao.relatorio_oficial import (
     CONJUNTO_CRITICO,
     CONJUNTO_GERAL,
     gerar_relatorio_oficial,
+    modelos_dos_usos,
 )
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -120,6 +126,12 @@ CUSTO_ESTIMADO_POR_CHAMADA = 0.4486 / 60
 TAG_CONGELAMENTO = "classificador-v1-congelado"
 ARQUIVOS_CONGELADOS = ["app/classificador.py", "app/contrato.py", "app/metricas.py"]
 
+MSG_TAG_SHA_DIVERGE = ("o commit da tag classificador-v1-congelado mudou desde a execução "
+                       "(tag_sha do início do diário diferente do atual)")
+MSG_RELATORIO_CONCLUIDO = ("Já existe uma avaliação concluída (relatório presente). "
+                           "Recusado: não sobrescrevo.")
+MSG_RELATORIO_ORFAO = ("Recusado: relatório presente (possivelmente incompleto): confira "
+                       "manualmente; não sobrescrevo.")
 MSG_ABORTO = "Execução abortada; nenhum resultado parcial foi exibido. Diário preservado."
 MSG_CLIENTE = "cliente não pôde ser criado (chave ausente?)"
 SEM_FIM = "sem marcação de fim"
@@ -195,8 +207,11 @@ def git_alteracoes(raiz=RAIZ):
 
 
 def conferir_tag(raiz=RAIZ):
-    """Confere a tag de congelamento. Levanta RuntimeError (mensagem sem conteúdo de arquivo) se:
-    a tag não existe; o HEAD não descende dela; ou algum de ARQUIVOS_CONGELADOS difere da tag.
+    """Confere a tag de congelamento e devolve o SHA do COMMIT apontado por ela.
+
+    Levanta RuntimeError (mensagem sem conteúdo de arquivo) se: a tag não existe; o HEAD não
+    descende dela; algum de ARQUIVOS_CONGELADOS difere da tag; ou o SHA não pôde ser lido. O SHA é
+    o de `git rev-parse refs/tags/<tag>^{commit}`: numa tag anotada, o commit e não o objeto da tag.
     """
     ref = f"refs/tags/{TAG_CONGELAMENTO}"
     if _git_codigo(["rev-parse", "--verify", "--quiet", ref], raiz) != 0:
@@ -205,6 +220,10 @@ def conferir_tag(raiz=RAIZ):
         raise RuntimeError(f"o HEAD atual não descende da tag {TAG_CONGELAMENTO}")
     if _git_codigo(["diff", "--quiet", ref, "HEAD", "--", *ARQUIVOS_CONGELADOS], raiz) != 0:
         raise RuntimeError(f"{', '.join(ARQUIVOS_CONGELADOS)} diferem da tag {TAG_CONGELAMENTO}")
+    sha = _git(["rev-parse", f"{ref}^{{commit}}"], raiz).strip()
+    if not sha:
+        raise RuntimeError(f"git rev-parse não devolveu o commit da tag {TAG_CONGELAMENTO}")
+    return sha
 
 
 # ---------- conjuntos ----------
@@ -266,10 +285,11 @@ def _causa_do_aborto(excecao):
     return {"tipo": type(excecao).__name__}
 
 
-def _executar(gerais, criticos, cliente, prompt, head, hashes):
+def _executar(gerais, criticos, cliente, prompt, head, hashes, tag_sha):
     """Roda as rodadas gravando cada item no diário assim que termina.
 
-    `hashes` (código, regra de retentativa e dados) vai inteiro para a linha de início. Devolve
+    `hashes` (código, regra de retentativa e dados) vai inteiro para a linha de início, junto com
+    git_head e tag_sha (commit apontado pela tag de congelamento). Devolve
     (iniciado_em, concluido_em, rodadas). Em qualquer interrupção grava a linha de aborto (melhor
     esforço) e relança a exceção.
     """
@@ -277,7 +297,7 @@ def _executar(gerais, criticos, cliente, prompt, head, hashes):
     iniciado_em = _iso()
     rodadas = []
     with open(PASTA_RESULTADOS / "diario.jsonl", "a", encoding="utf-8", newline="\n") as diario:
-        _gravar(diario, {"tipo": "inicio", "versao": VERSAO, "git_head": head,
+        _gravar(diario, {"tipo": "inicio", "versao": VERSAO, "git_head": head, "tag_sha": tag_sha,
                          "iniciado_em": iniciado_em, **hashes})
         try:
             for n in range(1, RODADAS + 1):
@@ -294,6 +314,8 @@ def _executar(gerais, criticos, cliente, prompt, head, hashes):
                             "tentativas": r["tentativas"],
                             "erros": r["erros"],
                             "usos": r["usos"],
+                            # modelos que a API informou nas tentativas (ordenado, sem None)
+                            "modelos": modelos_dos_usos(r["usos"]),
                         }
                         _gravar(diario, {"tipo": "item", "rodada": n, "conjunto": conjunto, **item})
                         itens.append({"conjunto": conjunto, **item})
@@ -464,8 +486,11 @@ def _diario_completo_e_concluido(caminho):
     return True
 
 
-def _execucao_do_diario(registrado, atuais, head_atual):
-    """Monta a `execucao` do relatório a partir do diário completo. ValueError (mensagem fixa)."""
+def _execucao_do_diario(registrado, atuais, head_atual, tag_sha_atual):
+    """Monta a `execucao` do relatório a partir do diário completo. ValueError (mensagem fixa).
+
+    Exige que o tag_sha do início do diário seja igual ao SHA atual do commit da tag.
+    """
     inicio, itens, fim = _validar_diario(_linhas_do_diario(PASTA_RESULTADOS / "diario.jsonl"))
     esperados = {**atuais, **{k: registrado[k] for k in CHAVES_DE_DADOS}}
     divergentes = sorted(k for k, v in esperados.items() if inicio.get(k) != v)
@@ -474,6 +499,8 @@ def _execucao_do_diario(registrado, atuais, head_atual):
     if divergentes:
         raise ValueError("o início do diário diverge do código atual e do registro: "
                          + ", ".join(divergentes))
+    if not isinstance(inicio.get("tag_sha"), str) or inicio["tag_sha"] != tag_sha_atual:
+        raise ValueError(MSG_TAG_SHA_DIVERGE)
     for valor in (inicio.get("git_head"), inicio.get("iniciado_em"), fim.get("concluido_em")):
         if not isinstance(valor, str) or not valor:
             raise ValueError("faltam git_head, iniciado_em ou concluido_em no diário")
@@ -487,6 +514,7 @@ def _execucao_do_diario(registrado, atuais, head_atual):
         "versao": VERSAO,
         "hashes": esperados,
         "git_head": inicio["git_head"],
+        "tag_sha": inicio["tag_sha"],
         "iniciado_em": inicio["iniciado_em"],
         "concluido_em": fim["concluido_em"],
         "modelo": PARAMETROS["model"],
@@ -569,13 +597,39 @@ def _dry_run(hashes, head):
 
 # ---------- --so-relatorio ----------
 
-def _so_relatorio(registrado, atuais, head):
-    """Relatório a partir de um diário completo. Não abre dados, não cria cliente, não chama a API."""
-    if (PASTA_RESULTADOS / "relatorio.json").exists() or (PASTA_RESULTADOS / "relatorio.md").exists():
-        _erro("Já existe uma avaliação concluída (relatório presente). Recusado: não sobrescrevo.")
+def _recusa_relatorio_existente():
+    """Saída 4 (com a mensagem) se já existe relatório; None se pode seguir.
+
+    Os dois arquivos presentes: avaliação concluída. Só um dos dois (órfão, talvez incompleto):
+    mensagem própria, para ninguém tomar um relatório pela metade como avaliação concluída.
+    """
+    json_existe = (PASTA_RESULTADOS / "relatorio.json").exists()
+    md_existe = (PASTA_RESULTADOS / "relatorio.md").exists()
+    if json_existe and md_existe:
+        _erro(MSG_RELATORIO_CONCLUIDO)
         return 4
+    if json_existe or md_existe:
+        _erro(MSG_RELATORIO_ORFAO)
+        return 4
+    return None
+
+
+def _trava_da_tag():
+    """Trava da tag, a mesma em --executar e em --so-relatorio. Devolve (sha, None) ou (None, 7)."""
     try:
-        execucao = _execucao_do_diario(registrado, atuais, head)
+        return conferir_tag(), None
+    except RuntimeError as e:
+        _erro(f"A trava da tag {TAG_CONGELAMENTO} falhou: {e}. Nada foi aberto nem chamado.")
+        return None, 7
+
+
+def _so_relatorio(registrado, atuais, head, tag_sha):
+    """Relatório a partir de um diário completo. Não abre dados, não cria cliente, não chama a API."""
+    codigo = _recusa_relatorio_existente()
+    if codigo is not None:
+        return codigo
+    try:
+        execucao = _execucao_do_diario(registrado, atuais, head, tag_sha)
     except ValueError as e:  # mensagens fixas, sem conteúdo do diário
         _erro(f"Diário inválido para --so-relatorio: {e}. Nenhum relatório foi gerado.")
         return 11
@@ -612,11 +666,11 @@ MSG_LOCK = ("v1.lock presente: outra execução em andamento ou lock órfão; co
             "manualmente. Nada foi tocado.")
 
 
-def _executar_e_relatar(gerais, criticos, cliente, prompt, head, hashes):
+def _executar_e_relatar(gerais, criticos, cliente, prompt, head, hashes, tag_sha):
     """Executa as rodadas e, só com as 3 completas, grava os relatórios. Devolve a saída."""
     try:
         iniciado_em, concluido_em, rodadas = _executar(gerais, criticos, cliente, prompt,
-                                                      head, hashes)
+                                                      head, hashes, tag_sha)
     except KeyboardInterrupt:
         _erro(MSG_ABORTO)
         return 130
@@ -627,6 +681,7 @@ def _executar_e_relatar(gerais, criticos, cliente, prompt, head, hashes):
         "versao": VERSAO,
         "hashes": hashes,
         "git_head": head,
+        "tag_sha": tag_sha,
         "iniciado_em": iniciado_em,
         "concluido_em": concluido_em,
         "modelo": PARAMETROS["model"],
@@ -638,17 +693,15 @@ def _executar_e_relatar(gerais, criticos, cliente, prompt, head, hashes):
 
 def _avaliar(args, registrado, atuais, prompt, head):
     """Fluxo --executar, travas (d)(i) a (d)(ix) do docstring do módulo."""
-    # (i) tag: antes de abrir qualquer dado.
-    try:
-        conferir_tag()
-    except RuntimeError as e:
-        _erro(f"A trava da tag {TAG_CONGELAMENTO} falhou: {e}. Nada foi aberto nem chamado.")
-        return 7
+    # (i) tag: antes de abrir qualquer dado. Guarda o SHA do commit da tag para o diário.
+    tag_sha, codigo = _trava_da_tag()
+    if codigo is not None:
+        return codigo
 
-    # (ii) avaliação já concluída.
-    if (PASTA_RESULTADOS / "relatorio.json").exists() or (PASTA_RESULTADOS / "relatorio.md").exists():
-        _erro("Já existe uma avaliação concluída (relatório presente). Recusado: não sobrescrevo.")
-        return 4
+    # (ii) relatório já existente (concluído, ou órfão a conferir manualmente).
+    codigo = _recusa_relatorio_existente()
+    if codigo is not None:
+        return codigo
 
     # (iii) lock: olhada sem criar (a criação atômica vem depois). Antes de qualquer outra coisa
     # que dependa do diário, para uma segunda execução não receber a orientação errada.
@@ -717,15 +770,37 @@ def _avaliar(args, registrado, atuais, prompt, head):
                       "Nada foi executado.")
                 return 5
         # (ix) execução. Nada de métricas na saída, nem durante nem depois.
-        return _executar_e_relatar(gerais, criticos, cliente, prompt, head, {**atuais, **dados})
+        return _executar_e_relatar(gerais, criticos, cliente, prompt, head, {**atuais, **dados},
+                                   tag_sha)
     finally:
         _remover_lock()
 
 
 # ---------- main ----------
 
+EPILOGO_CODIGOS = """\
+Códigos de saída:
+  0    ok ou dry-run
+  1    aborto durante a execução OU falha ao gerar o relatório
+  2    congelamento diverge (também é o erro de argumentos do argparse)
+  3    alterações não commitadas ou git indisponível
+  4    avaliação já concluída
+  5    diário anterior sem --motivo-tecnico, motivo sem nada a arquivar, diário completo
+       (use --so-relatorio) ou falha ao arquivar
+  6    conjunto inválido
+  7    tag/ancestralidade/arquivos congelados
+  8    hash dos dados diverge
+  9    outra execução em andamento ou não foi possível criar o lock
+  10   cliente não pôde ser criado
+  11   --so-relatorio inválido
+  130  Ctrl+C
+"""
+
+
 def _parser():
     p = argparse.ArgumentParser(description="Avaliação oficial da v1 (50 gerais e 15 críticos).",
+                                epilog=EPILOGO_CODIGOS,
+                                formatter_class=argparse.RawDescriptionHelpFormatter,
                                 allow_abbrev=False)
     p.add_argument("--executar", action="store_true",
                    help="roda de verdade (chamadas pagas); sem isto, só o dry-run")
@@ -782,7 +857,11 @@ def main(argv=None):
         return 3
 
     if args.so_relatorio:
-        return _so_relatorio(registrado, atuais, head)
+        # Mesmas travas do --executar: hashes e git (acima) e, depois, a tag (saída 7).
+        tag_sha, codigo = _trava_da_tag()
+        if codigo is not None:
+            return codigo
+        return _so_relatorio(registrado, atuais, head, tag_sha)
 
     # Trava (c): sem --executar, só o dry-run.
     if not args.executar:

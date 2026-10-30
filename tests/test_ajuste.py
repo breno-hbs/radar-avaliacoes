@@ -168,7 +168,8 @@ def test_rodar_envia_so_textos_e_registra_previsoes(dev):
             assert item["previsao"] == item["gabarito"]
             assert item["tentativas"] == 1
             assert item["erros"] == []
-            assert item["usos"] == [{"tentativa": 1, "input_tokens": 2500, "output_tokens": 40}]
+            assert item["usos"] == [{"tentativa": 1, "input_tokens": 2500, "output_tokens": 40,
+                                     "modelo": None}]
 
 
 class ClienteQueFalhaNaQuinta:
