@@ -3,8 +3,8 @@ Assistente que transforma avaliações de restaurante em até 3 ações por sema
 
 ## Resultado da avaliação oficial da v1
 
-Avaliação do classificador (prompt v1 congelado) sobre as 85 avaliações fictícias do projeto, em 3
-rodadas completas. **Não é prova de desempenho real:** veja as ressalvas abaixo, que valem para
+Avaliação do classificador (prompt v1 congelado) sobre as 65 avaliações reservadas para medir (50
+gerais e 15 críticas, do conjunto de 85 avaliações fictícias do projeto), em 3 rodadas completas. **Não é prova de desempenho real:** veja as ressalvas abaixo, que valem para
 qualquer número desta seção.
 
 - **Quando e o quê:** 2026-10-30, `claude-sonnet-5-5`, no commit da tag
