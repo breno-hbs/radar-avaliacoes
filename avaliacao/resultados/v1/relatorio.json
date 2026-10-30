@@ -1,0 +1,640 @@
+{
+  "versao": "v1",
+  "aviso": "Dados simulados. Projeto independente, sem vínculo com o iFood.",
+  "gerado_por_so_relatorio": false,
+  "git_head_atual": null,
+  "hashes": {
+    "prompt_sha256": "e84b4b75d8313505a205153e6937d2920d9088a299bb505b469760236d9f9491",
+    "schema_sha256": "f6bfb7f8cf400f5ba4f787d802b398f192aebb8e74877b6320e20b7219f8259a",
+    "parametros_sha256": "3ed4602dc12e7f5f2e769d8825cf83848ea3ef13c839a33e64ca925ab9b867dc",
+    "regra_retentativa_sha256": "d06f01a0f85ca877f108e6d007d97c96643587a301bbb26879f097b0cd95827f",
+    "modelo": "claude-sonnet-5-5",
+    "anthropic": "2.3.0",
+    "python_dotenv": "1.2.4",
+    "dados_geral_sha256": "c18bcc055ec08c14764012a9b1e488388332a3573632d5bc4521aab824805881",
+    "dados_critico_sha256": "6e7859f1e4995d26af5be6e26237c962f142ee21c16d6484a5f78a70909a6329"
+  },
+  "modelo": "claude-sonnet-5-5",
+  "parametros": {
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 400,
+    "thinking": {
+      "type": "between_tools"
+    },
+    "output_config": {
+      "effort": "medium",
+      "format": {
+        "type": "json_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "categorias": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "atraso",
+                  "item_faltando",
+                  "qualidade_temperatura",
+                  "embalagem",
+                  "atendimento",
+                  "entregador"
+                ]
+              }
+            },
+            "criticidade": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "saude",
+                  "alergia",
+                  "cobranca_indevida"
+                ]
+              }
+            }
+          },
+          "required": [
+            "categorias",
+            "criticidade"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "git_head": "f84a722114356f96ce8a15efe093b941bb286bbd",
+  "tag_sha": "f84a722114356f96ce8a15efe093b941bb286bbd",
+  "modelos_informados": [
+    "claude-sonnet-5-5"
+  ],
+  "saidas_invalidas_total": 0,
+  "chamadas_planejadas": 195,
+  "iniciado_em": "2026-10-30T00:17:45-03:00",
+  "concluido_em": "2026-10-30T00:21:25-03:00",
+  "chamadas_realizadas": 195,
+  "tentativas_extras": 0,
+  "n_abortadas": 0,
+  "abortadas": [],
+  "rodadas": [
+    {
+      "rodada": 1,
+      "gerais": {
+        "total": 50,
+        "f1": {
+          "por_categoria": {
+            "atraso": {
+              "tp": 11,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "item_faltando": {
+              "tp": 10,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "qualidade_temperatura": {
+              "tp": 9,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "embalagem": {
+              "tp": 8,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "atendimento": {
+              "tp": 8,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "entregador": {
+              "tp": 8,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            }
+          },
+          "micro": {
+            "precisao": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "macro_f1": 1.0,
+          "categorias_fora_do_macro": []
+        },
+        "falsos_alertas": {
+          "falsos_alertas": 0,
+          "total_nao_criticas": 50,
+          "auxiliar_invalidas_gerais_da_rodada": 0
+        }
+      },
+      "criticos": {
+        "detectadas": 15,
+        "total": 15,
+        "por_tipo": {
+          "saude": {
+            "acertos": 5,
+            "total": 5,
+            "falsos_positivos": 0,
+            "recall": 1.0
+          },
+          "alergia": {
+            "acertos": 5,
+            "total": 5,
+            "falsos_positivos": 0,
+            "recall": 1.0
+          },
+          "cobranca_indevida": {
+            "acertos": 5,
+            "total": 5,
+            "falsos_positivos": 0,
+            "recall": 1.0
+          }
+        },
+        "auxiliar_invalidas_criticos_da_rodada": 0
+      },
+      "auxiliar_invalidas_por_rodada": {
+        "na_rodada": 0,
+        "itens_da_rodada": 65
+      }
+    },
+    {
+      "rodada": 2,
+      "gerais": {
+        "total": 50,
+        "f1": {
+          "por_categoria": {
+            "atraso": {
+              "tp": 11,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "item_faltando": {
+              "tp": 10,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "qualidade_temperatura": {
+              "tp": 9,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "embalagem": {
+              "tp": 8,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "atendimento": {
+              "tp": 8,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "entregador": {
+              "tp": 8,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            }
+          },
+          "micro": {
+            "precisao": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "macro_f1": 1.0,
+          "categorias_fora_do_macro": []
+        },
+        "falsos_alertas": {
+          "falsos_alertas": 0,
+          "total_nao_criticas": 50,
+          "auxiliar_invalidas_gerais_da_rodada": 0
+        }
+      },
+      "criticos": {
+        "detectadas": 15,
+        "total": 15,
+        "por_tipo": {
+          "saude": {
+            "acertos": 5,
+            "total": 5,
+            "falsos_positivos": 0,
+            "recall": 1.0
+          },
+          "alergia": {
+            "acertos": 5,
+            "total": 5,
+            "falsos_positivos": 0,
+            "recall": 1.0
+          },
+          "cobranca_indevida": {
+            "acertos": 5,
+            "total": 5,
+            "falsos_positivos": 0,
+            "recall": 1.0
+          }
+        },
+        "auxiliar_invalidas_criticos_da_rodada": 0
+      },
+      "auxiliar_invalidas_por_rodada": {
+        "na_rodada": 0,
+        "itens_da_rodada": 65
+      }
+    },
+    {
+      "rodada": 3,
+      "gerais": {
+        "total": 50,
+        "f1": {
+          "por_categoria": {
+            "atraso": {
+              "tp": 11,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "item_faltando": {
+              "tp": 10,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "qualidade_temperatura": {
+              "tp": 9,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "embalagem": {
+              "tp": 8,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "atendimento": {
+              "tp": 8,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            },
+            "entregador": {
+              "tp": 8,
+              "fp": 0,
+              "fn": 0,
+              "precisao": 1.0,
+              "recall": 1.0,
+              "f1": 1.0
+            }
+          },
+          "micro": {
+            "precisao": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "macro_f1": 1.0,
+          "categorias_fora_do_macro": []
+        },
+        "falsos_alertas": {
+          "falsos_alertas": 0,
+          "total_nao_criticas": 50,
+          "auxiliar_invalidas_gerais_da_rodada": 0
+        }
+      },
+      "criticos": {
+        "detectadas": 15,
+        "total": 15,
+        "por_tipo": {
+          "saude": {
+            "acertos": 5,
+            "total": 5,
+            "falsos_positivos": 0,
+            "recall": 1.0
+          },
+          "alergia": {
+            "acertos": 5,
+            "total": 5,
+            "falsos_positivos": 0,
+            "recall": 1.0
+          },
+          "cobranca_indevida": {
+            "acertos": 5,
+            "total": 5,
+            "falsos_positivos": 0,
+            "recall": 1.0
+          }
+        },
+        "auxiliar_invalidas_criticos_da_rodada": 0
+      },
+      "auxiliar_invalidas_por_rodada": {
+        "na_rodada": 0,
+        "itens_da_rodada": 65
+      }
+    }
+  ],
+  "medias": {
+    "rodadas": 3,
+    "gerais": {
+      "f1_micro": {
+        "media": 1.0,
+        "rodadas": 3
+      },
+      "f1_macro": {
+        "media": 1.0,
+        "rodadas": 3
+      },
+      "por_categoria": {
+        "atraso": {
+          "media": 1.0,
+          "rodadas": 3
+        },
+        "item_faltando": {
+          "media": 1.0,
+          "rodadas": 3
+        },
+        "qualidade_temperatura": {
+          "media": 1.0,
+          "rodadas": 3
+        },
+        "embalagem": {
+          "media": 1.0,
+          "rodadas": 3
+        },
+        "atendimento": {
+          "media": 1.0,
+          "rodadas": 3
+        },
+        "entregador": {
+          "media": 1.0,
+          "rodadas": 3
+        }
+      },
+      "falsos_alertas": {
+        "media": 0.0,
+        "total_nao_criticas": 50
+      }
+    },
+    "criticos": {
+      "detectadas": {
+        "media": 15.0,
+        "rodadas": 3
+      },
+      "total": 15,
+      "por_tipo": {
+        "saude": {
+          "acertos_media": 5.0,
+          "total": 5,
+          "falsos_positivos_media": 0.0
+        },
+        "alergia": {
+          "acertos_media": 5.0,
+          "total": 5,
+          "falsos_positivos_media": 0.0
+        },
+        "cobranca_indevida": {
+          "acertos_media": 5.0,
+          "total": 5,
+          "falsos_positivos_media": 0.0
+        }
+      }
+    }
+  },
+  "frase_das_medias": "Reportadas as três rodadas e a média; nenhuma rodada foi escolhida.",
+  "variacao": [],
+  "erros": [
+    {
+      "rodada": 1,
+      "gerais": [],
+      "criticos": [
+        {
+          "id": "crit-014",
+          "texto": "minha janta nunca apareceu aqui, mas deram baixa como entregue. depois cancelaram no chat dizendo que não ia cobrar e mesmo assim descontaram tudo do cartão",
+          "gabarito": {
+            "categorias": [
+              "atraso"
+            ],
+            "criticidade": [
+              "cobranca_indevida"
+            ]
+          },
+          "previsao": {
+            "categorias": [
+              "entregador",
+              "atraso"
+            ],
+            "criticidade": [
+              "cobranca_indevida"
+            ]
+          },
+          "tentativas": 1,
+          "modelos": [
+            "claude-sonnet-5-5"
+          ]
+        },
+        {
+          "id": "crit-015",
+          "texto": "veio sem a coca que fazia parte do combo. a loja reconheceu e disse que devolveria o valor da bebida até ontem, mas não caiu nada e continuo pagando por ela",
+          "gabarito": {
+            "categorias": [
+              "item_faltando"
+            ],
+            "criticidade": [
+              "cobranca_indevida"
+            ]
+          },
+          "previsao": {
+            "categorias": [
+              "item_faltando",
+              "atendimento"
+            ],
+            "criticidade": [
+              "cobranca_indevida"
+            ]
+          },
+          "tentativas": 1,
+          "modelos": [
+            "claude-sonnet-5-5"
+          ]
+        }
+      ]
+    },
+    {
+      "rodada": 2,
+      "gerais": [],
+      "criticos": [
+        {
+          "id": "crit-014",
+          "texto": "minha janta nunca apareceu aqui, mas deram baixa como entregue. depois cancelaram no chat dizendo que não ia cobrar e mesmo assim descontaram tudo do cartão",
+          "gabarito": {
+            "categorias": [
+              "atraso"
+            ],
+            "criticidade": [
+              "cobranca_indevida"
+            ]
+          },
+          "previsao": {
+            "categorias": [
+              "entregador",
+              "atraso"
+            ],
+            "criticidade": [
+              "cobranca_indevida"
+            ]
+          },
+          "tentativas": 1,
+          "modelos": [
+            "claude-sonnet-5-5"
+          ]
+        },
+        {
+          "id": "crit-015",
+          "texto": "veio sem a coca que fazia parte do combo. a loja reconheceu e disse que devolveria o valor da bebida até ontem, mas não caiu nada e continuo pagando por ela",
+          "gabarito": {
+            "categorias": [
+              "item_faltando"
+            ],
+            "criticidade": [
+              "cobranca_indevida"
+            ]
+          },
+          "previsao": {
+            "categorias": [
+              "item_faltando",
+              "atendimento"
+            ],
+            "criticidade": [
+              "cobranca_indevida"
+            ]
+          },
+          "tentativas": 1,
+          "modelos": [
+            "claude-sonnet-5-5"
+          ]
+        }
+      ]
+    },
+    {
+      "rodada": 3,
+      "gerais": [],
+      "criticos": [
+        {
+          "id": "crit-014",
+          "texto": "minha janta nunca apareceu aqui, mas deram baixa como entregue. depois cancelaram no chat dizendo que não ia cobrar e mesmo assim descontaram tudo do cartão",
+          "gabarito": {
+            "categorias": [
+              "atraso"
+            ],
+            "criticidade": [
+              "cobranca_indevida"
+            ]
+          },
+          "previsao": {
+            "categorias": [
+              "entregador",
+              "atraso"
+            ],
+            "criticidade": [
+              "cobranca_indevida"
+            ]
+          },
+          "tentativas": 1,
+          "modelos": [
+            "claude-sonnet-5-5"
+          ]
+        },
+        {
+          "id": "crit-015",
+          "texto": "veio sem a coca que fazia parte do combo. a loja reconheceu e disse que devolveria o valor da bebida até ontem, mas não caiu nada e continuo pagando por ela",
+          "gabarito": {
+            "categorias": [
+              "item_faltando"
+            ],
+            "criticidade": [
+              "cobranca_indevida"
+            ]
+          },
+          "previsao": {
+            "categorias": [
+              "item_faltando",
+              "atendimento"
+            ],
+            "criticidade": [
+              "cobranca_indevida"
+            ]
+          },
+          "tentativas": 1,
+          "modelos": [
+            "claude-sonnet-5-5"
+          ]
+        }
+      ]
+    }
+  ],
+  "tokens": {
+    "usos_total": 195,
+    "usos_com_entrada": 195,
+    "usos_com_saida": 195,
+    "entrada": 706527,
+    "saida": 4871,
+    "custo_estimado_usd": 1.461764,
+    "preco_entrada_mtok": 2,
+    "preco_saida_mtok": 10,
+    "fonte_preco": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "data_consulta_preco": "2026-10-29"
+  },
+  "ressalvas": [
+    "Amostra pequena: 50 gerais e 15 críticos. Os números avaliam o protótipo; não garantem desempenho em produção e carregam muita incerteza.",
+    "Rotulador único: as classificações de referência foram revisadas manualmente por uma só pessoa; não há medida de concordância entre rotuladores.",
+    "As 85 avaliações fictícias foram criadas com apoio de IA e nenhuma foi escrita à mão. Se a mesma IA, ou uma parecida, gera os dados e classifica, há risco de acerto inflado; isso fica declarado como limitação aberta.",
+    "Amostra crítica enriquecida: os 15 casos críticos foram escolhidos para medir detecção e a amostra não representa a frequência real de relatos críticos.",
+    "O conjunto crítico não é totalmente independente da definição dos critérios: o caso crit-007 motivou a regra de acúmulo da versão 1.1 do guia (2026-10-28), antes de qualquer execução do classificador. Há também exposição ao crit-009: a primeira redação do prompt trazia uma cláusula derivada desse caso, removida antes de qualquer medição oficial.",
+    "As 85 avaliações demonstram o processo de avaliação do classificador e não comprovam desempenho com clientes reais.",
+    "Convenção de rotulação: o pedido que \"nunca chegou\" é classificado como atraso.",
+    "Alergia de terceiro (pedido de outra pessoa que é alérgica) fica por interpretação do modelo: o prompt não tem cláusula sobre isso.",
+    "Saídas inválidas devem ser citadas na mesma frase dos falsos alertas: uma saída inválida vale como previsão vazia e pode esconder um falso alerta."
+  ]
+}
