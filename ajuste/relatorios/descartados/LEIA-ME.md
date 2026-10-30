@@ -5,9 +5,17 @@ Dados simulados. Projeto independente, sem vínculo com o iFood.
 Esta pasta guarda a execução **DESCARTADA** da v1 (3 rodadas dos 20 de desenvolvimento,
 2026-10-29T21:34:42-03:00) feita com uma redação que continha duas cláusulas depois removidas:
 
-- na linha de alergia, "de quem vai consumir o pedido" (derivada da decisão do caso crit-009 em
-  `docs/CASOS_AMBIGUOS.md`, que não está no guia v1.1);
-- na linha do entregador, "(ou no ponto esperado)" (ampliava o guia).
+- na linha de alergia, a frase completa era: "alergia: reação alérgica relatada, ou presença
+  relatada de um alérgeno que representa risco concreto ao cliente, por exemplo quando o cliente
+  declara alergia, própria ou de quem vai consumir o pedido, e recebe o alérgeno; neste caso pode
+  ser crítica mesmo sem reação." (o resto da linha, com as exclusões, era igual). A cláusula
+  "de quem vai consumir o pedido" vem da decisão do caso crit-009 em `docs/CASOS_AMBIGUOS.md`, que
+  não está no guia v1.1. Na v1 oficial a frase é: "reação alérgica relatada, ou presença de
+  alérgeno que representa risco concreto ao cliente; neste caso pode ser crítica mesmo sem reação.";
+- na linha do entregador, o acréscimo completo era: "Não entregar na porta (ou no ponto esperado)
+  só é entregador se o texto indicar descumprimento do combinado ou comportamento inadequado; sem
+  isso, não rotule entregador." O trecho "(ou no ponto esperado)" ampliava o guia (que fala só em
+  entregar "na minha porta"). Na v1 oficial o acréscimo é o mesmo sem esse trecho.
 
 **Isto NÃO é a v1 oficial e NÃO é resultado dela.** A v1 oficial é `prompts/classificador/v1.md`, com
 o relatório em `ajuste/relatorios/v1.md`. Esta execução foi descartada antes de qualquer medição
