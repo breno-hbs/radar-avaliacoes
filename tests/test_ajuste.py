@@ -25,9 +25,19 @@ from ajuste.rodar_dev import (
     rodar,
     separar,
 )
-from app.classificador import PARAMETROS, ErroPermanenteDaAPI
+from app.classificador import PARAMETROS, ErroPermanenteDaAPI, ErroTecnicoDaAPI, ErroTecnicoEsgotado
 
 RAIZ = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture(autouse=True)
+def esperas(monkeypatch):
+    """Nenhum teste espera de verdade: a espera entre tentativas do ajuste só registra o tempo."""
+    from ajuste import rodar_dev
+
+    registradas = []
+    monkeypatch.setattr(rodar_dev, "_dormir", registradas.append)
+    return registradas
 
 
 class Bloco:
@@ -201,6 +211,96 @@ def test_main_aborta_sem_gravar_nada_em_erro_permanente(dev, tmp_path, monkeypat
     assert "401" in str(exc.value)
     assert "SEGREDO" not in str(exc.value)
     assert not pasta.exists() or list(pasta.iterdir()) == []
+
+
+class ClienteQueEsgotaNaQuinta:
+    """Responde bem 4 vezes e, da 5ª em diante, levanta 503 (erro técnico que nunca passa)."""
+
+    def __init__(self, saidas_por_texto):
+        self.ok = ClienteEspelho(saidas_por_texto)
+        self.messages = self
+        self.chamadas = 0
+
+    def create(self, **kwargs):
+        self.chamadas += 1
+        if self.chamadas >= 5:
+            resposta = httpx2.Response(503, request=httpx2.Request("POST", "https://x"),
+                                       headers={"request-id": "req_503"})
+            raise anthropic.APIStatusError("SEGREDO no corpo", response=resposta, body=None)
+        return self.ok.create(**kwargs)
+
+
+def test_rodar_aborta_inteira_em_erro_tecnico_esgotado(dev, esperas):
+    cliente = ClienteQueEsgotaNaQuinta(_saidas_do_gabarito(dev))
+    with pytest.raises(ErroTecnicoEsgotado):
+        rodar(dev, cliente, "PROMPT", rodadas=3)
+    assert cliente.chamadas == 7  # 4 boas + 3 tentativas do item que esgotou; nada depois
+    assert esperas == [2, 5]  # esperas só registradas: nenhum teste espera de verdade
+
+
+def test_rodar_usa_o_dormir_injetado_e_so_espera_quando_precisa(dev):
+    class ClienteTimeoutUmaVez:
+        def __init__(self, saidas):
+            self.ok = ClienteEspelho(saidas)
+            self.messages = self
+            self.chamadas = 0
+
+        def create(self, **kwargs):
+            self.chamadas += 1
+            if self.chamadas == 1:
+                raise anthropic.APITimeoutError(request=httpx2.Request("POST", "https://x"))
+            return self.ok.create(**kwargs)
+
+    registro = []
+    cliente = ClienteTimeoutUmaVez(_saidas_do_gabarito(dev))
+    rodadas = rodar(dev[:2], cliente, "PROMPT", rodadas=1, dormir=registro.append)
+    assert registro == [2]  # só uma espera, antes da 2ª tentativa do 1º item
+    assert [i["tentativas"] for i in rodadas[0]["itens"]] == [2, 1]
+    assert rodadas[0]["itens"][0]["erros"][0]["tipo"] == "APITimeoutError"
+
+
+@pytest.mark.parametrize("cliente_ruim, esperado_na_mensagem", [
+    (lambda saidas: ClienteQueFalhaNaQuinta(saidas), "401"),
+    (lambda saidas: ClienteQueEsgotaNaQuinta(saidas), "503"),
+], ids=["permanente", "tecnico_esgotado"])
+def test_main_trata_a_familia_de_erros_tecnicos_sem_gravar_nada(
+        dev, tmp_path, monkeypatch, cliente_ruim, esperado_na_mensagem):
+    from ajuste import rodar_dev
+
+    pasta = tmp_path / "relatorios"
+    monkeypatch.setattr(rodar_dev, "RELATORIOS", pasta)
+    monkeypatch.setattr(rodar_dev, "criar_cliente",
+                        lambda: cliente_ruim(_saidas_do_gabarito(dev)))
+    with pytest.raises(SystemExit) as exc:
+        rodar_dev.main(["--versao", "v0", "--rodadas", "1"])
+    mensagem = str(exc.value)
+    assert "Execução abortada, nada foi gravado" in mensagem
+    assert esperado_na_mensagem in mensagem
+    assert "SEGREDO" not in mensagem  # sem mensagem nem corpo da API
+    assert not pasta.exists() or list(pasta.iterdir()) == []
+
+
+def test_main_nao_captura_outras_excecoes_como_erro_da_api(dev, tmp_path, monkeypatch):
+    from ajuste import rodar_dev
+
+    class ClienteComBug:
+        messages = None
+
+        def __init__(self):
+            self.messages = self
+
+        def create(self, **kwargs):
+            raise RuntimeError("bug local")
+
+    monkeypatch.setattr(rodar_dev, "RELATORIOS", tmp_path / "relatorios")
+    monkeypatch.setattr(rodar_dev, "criar_cliente", lambda: ClienteComBug())
+    with pytest.raises(RuntimeError):
+        rodar_dev.main(["--versao", "v0", "--rodadas", "1"])
+
+
+def test_base_dos_erros_que_abortam_e_a_familia_certa():
+    assert issubclass(ErroPermanenteDaAPI, ErroTecnicoDaAPI)
+    assert issubclass(ErroTecnicoEsgotado, ErroTecnicoDaAPI)
 
 
 def test_main_recusa_sobrescrever_e_valida_rodadas(tmp_path, monkeypatch):
