@@ -22,7 +22,10 @@ Nos 50 gerais:
 - falsos alertas: avaliação **não crítica marcada como crítica** (conta 1 por avaliação);
 - saídas inválidas, **citadas na mesma frase dos falsos alertas**, com **uma só base**: "nas 3
   rodadas e nos 65 itens" (M de 195; inválida = previsão `None` em gerais ou críticos). Essa base
-  vale na frase de cada rodada, nas médias, no cabeçalho e nos dados JSON; a contagem por rodada, se
+  vale na frase de cada rodada, nas médias, no cabeçalho e nos dados JSON, onde a contagem
+  OFICIAL é o campo `saidas_invalidas_total` (as contagens brutas por rodada ou conjunto, se
+  existirem, têm prefixo `auxiliar_`; `chamadas_planejadas` = 195 e `chamadas_realizadas` inclui
+  retentativas); a contagem por rodada, se
   aparecer, vem separada e rotulada como detalhe.
 
 Nos 15 críticos:
@@ -67,7 +70,8 @@ relatório diz quantas entraram.
 - Uma avaliação concluída nunca é sobrescrita: o script se recusa se já existir relatório.
 - Se as 3 rodadas terminam e só a geração do relatório falha, o diário completo é preservado e o
   relatório é regenerado com `--so-relatorio`, **sem chamar a API** e sem refazer nada. Essa
-  opção recusa diário incompleto, abortado ou com hashes diferentes dos registrados.
+  opção aplica as mesmas travas de hashes, git e tag/arquivos congelados do `--executar` e recusa
+  diário incompleto, abortado, com hashes ou SHA da tag diferentes dos registrados.
 
 ## 4. Travas antes da primeira chamada
 
@@ -78,11 +82,11 @@ relatório diz quantas entraram.
    o `git rev-parse HEAD` da execução.
 3. Sem `--executar`, o script só faz um dry-run (versão, hashes, número de chamadas), sem abrir os
    dados e sem chamar a API.
-4. Com `--executar`: a tag `classificador-v1-congelado` existe, o `HEAD` descende dela e
+4. Com `--executar` **e** com `--so-relatorio`: a tag `classificador-v1-congelado` existe, o `HEAD` descende dela e
    `app/classificador.py`, `app/contrato.py` e `app/metricas.py` são idênticos aos da tag.
-5. Com `--executar`: o SHA-256 do JSON canônico de `geral.json` e `critico.json` confere com o do
+5. Só com `--executar` (nunca no dry-run nem no `--so-relatorio`): o SHA-256 do JSON canônico de `geral.json` e `critico.json` confere com o do
    registro (nunca no dry-run); os hashes vão para o diário e o relatório.
-6. Com `--executar`: os conjuntos são validados (50 e 15 itens, rótulos do contrato) e o cliente
+6. Só com `--executar`: os conjuntos são validados (50 e 15 itens, rótulos do contrato) e o cliente
    é criado **antes** de qualquer arquivamento; um arquivo de trava (`avaliacao/resultados/v1.lock`,
    criação exclusiva) impede duas execuções ao mesmo tempo.
 7. O prompt é lido uma só vez: o texto conferido por hash é o mesmo enviado à API.
@@ -113,27 +117,51 @@ Qualquer ajuste do prompt (ou de qualquer item congelado) depois de ver o result
 
 ## 7. Como executar (quando chegar a hora)
 
+Os comandos abaixo foram escritos para o **Windows PowerShell 5.1** (um comando por linha, sem
+`&&`; o ambiente virtual ativado com `.\.venv\Scripts\Activate.ps1`). O `python -c` fica numa linha só,
+com aspas duplas por fora e simples por dentro (testado no PowerShell 5.1).
+
 Pré-requisitos, nesta ordem:
-1. PR do congelamento mergeado; **executar a partir de `main` atualizada** (`git checkout main &&
-   git pull`), nunca da branch da feature (um squash faria a tag deixar de ser ancestral do `HEAD`).
-2. Antes de criar a tag, conferir os hashes dos dados localmente (só imprime hashes):
-   `python -c "from avaliacao.congelamento import hash_dados; print(hash_dados('data/geral.json'),
-   hash_dados('data/critico.json'))"` e comparar com `dados_*_sha256` do registro.
-3. Criar a tag `classificador-v1-congelado` no commit do merge e **enviá-la ao GitHub**
-   (`git push origin classificador-v1-congelado`). A tag marca o instante do congelamento; não se
-   move (`git tag -f` é proibido) e, se um item congelado precisar mudar, vira a v2.
-4. Árvore limpa e `ANTHROPIC_API_KEY` no `.env`.
+1. PR do congelamento mergeado; **executar a partir de `main` atualizada**, nunca da branch da
+   feature (um squash faria a tag deixar de ser ancestral do `HEAD`):
+
+   ```powershell
+   git checkout main
+   git pull
+   ```
+
+2. Antes de criar a tag, conferir os hashes dos dados localmente (só imprime hashes) e comparar com
+   `dados_geral_sha256` e `dados_critico_sha256` do `v1.congelamento.md`:
+
+   ```powershell
+   python -c "from avaliacao.congelamento import hash_dados; print(hash_dados('data/geral.json')); print(hash_dados('data/critico.json'))"
+   ```
+
+3. Criar a tag no commit do merge e **enviá-la ao GitHub**. A tag marca o instante do congelamento;
+   não se move (`git tag -f` é proibido) e, se um item congelado precisar mudar, vira a v2:
+
+   ```powershell
+   git tag classificador-v1-congelado
+   git push origin classificador-v1-congelado
+   ```
+
+   O código confere a tag **local** (existe, `HEAD` descendente, arquivos congelados iguais); ele
+   **não** confere que a tag foi enviada ao GitHub nem que se está em `main`. Isso é procedimento.
+4. Árvore limpa (`git status`) e `ANTHROPIC_API_KEY` no `.env`.
 
 O relatório grava o **SHA do commit da tag** e o **`HEAD` da execução**; o diário grava os dois no
 início (`--so-relatorio` exige que o SHA da tag continue o mesmo).
 
-```bash
-python -m avaliacao.rodar_oficial               # dry-run: não abre dados nem chama a API
-python -m avaliacao.rodar_oficial --executar    # avaliação oficial (195 chamadas)
-python -m avaliacao.rodar_oficial --so-relatorio  # regenera o relatório de um diário completo
+```powershell
+python -m avaliacao.rodar_oficial
+python -m avaliacao.rodar_oficial --executar
+python -m avaliacao.rodar_oficial --so-relatorio
 ```
 
+A primeira linha é o dry-run (não abre dados nem chama a API). A segunda é a avaliação oficial (195
+chamadas planejadas). A terceira regenera o relatório de um diário completo, sem chamar a API.
 `--so-relatorio` aplica as mesmas travas de hashes, git e tag/arquivos congelados do `--executar`.
+Para ver só a ajuda e os códigos de saída: `python -m avaliacao.rodar_oficial --help`.
 
 Códigos de saída (também na ajuda do script, `--help`): 0 sucesso ou dry-run; 1 aborto durante a
 execução (erro permanente, erro técnico esgotado, qualquer exceção) ou falha ao gerar o relatório;
