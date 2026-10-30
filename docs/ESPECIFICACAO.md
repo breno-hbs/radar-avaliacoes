@@ -90,12 +90,16 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 - Uma ação tem até três avaliações como evidência, e uma avaliação pode ser evidência de várias ações. O banco garante a integridade referencial com `acoes` e `avaliacoes`.
 - A ligação é gravada no momento em que o dono registra a ação, com as evidências efetivamente exibidas no card. O servidor não recalcula o ranking nesse momento.
-- `trecho_exibido` guarda o trecho mostrado ao dono e `posicao`, a ordem no card, para que o histórico reproduza o card mesmo que a seleção de trechos mude no futuro.
+- `trecho_exibido` guarda o trecho mostrado ao dono e `posicao`, a ordem no card, para que o histórico mostre os trechos que o dono viu, mesmo que a seleção de trechos mude no futuro. A contagem de menções continua calculada das tabelas e pode diferir da exibida se uma avaliação for reclassificada.
 - Não se associam à ação todas as avaliações da categoria. A quantidade de menções continua calculada das tabelas.
 - O histórico permite consultar a ação, suas evidências e o texto original de cada avaliação.
 - A medição do efeito continua usando `categoria` e `semana_inicio`, e não usa essa tabela.
 
-**Decisão em aberto (Fase 2):** definir como o `POST /api/painel/{token}/acoes` recebe as evidências exibidas e como o servidor confere que elas pertencem ao card (por exemplo, que a avaliação é da categoria e da semana do card e que `trecho_exibido` vem do texto dela), sem recalcular o ranking.
+**Decisão em aberto (Fase 2):** definir como o `POST /api/painel/{token}/acoes` recebe as evidências exibidas e como o servidor confere que elas pertencem ao card (por exemplo, que a avaliação é da categoria e da semana do card e que `trecho_exibido` vem do texto dela), sem recalcular o ranking. Considerar que um `trecho_exibido` vindo do cliente é texto não confiável: pode ser forjado e, se o painel o renderizar sem tratamento, permitir XSS armazenado. A decisão deve dizer se o servidor o deriva do texto da avaliação em vez de aceitá-lo.
+
+**Decisão em aberto (Fase 2):** definir se uma ação pode existir sem evidências, se `trecho_exibido` e `posicao` aceitam nulo, e o comportamento ao apagar uma ação ou uma avaliação com evidências ligadas (`RESTRICT` ou `CASCADE`).
+
+**Requisito de implementação:** o SQLite só aplica chaves estrangeiras com `PRAGMA foreign_keys=ON` em cada conexão. A Fase 2 deve ativá-lo e ter um teste que tente gravar uma evidência de avaliação inexistente.
 
 ## Regras de negócio
 
