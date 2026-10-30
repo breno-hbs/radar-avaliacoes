@@ -10,6 +10,8 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import anthropic
+import httpx2
 import pytest
 
 from ajuste.relatorio import gerar_relatorio
@@ -23,7 +25,7 @@ from ajuste.rodar_dev import (
     rodar,
     separar,
 )
-from app.classificador import PARAMETROS
+from app.classificador import PARAMETROS, ErroPermanenteDaAPI
 
 RAIZ = Path(__file__).resolve().parent.parent
 
@@ -157,6 +159,64 @@ def test_rodar_envia_so_textos_e_registra_previsoes(dev):
             assert item["tentativas"] == 1
             assert item["erros"] == []
             assert item["usos"] == [{"tentativa": 1, "input_tokens": 2500, "output_tokens": 40}]
+
+
+class ClienteQueFalhaNaQuinta:
+    """Responde bem 4 vezes e na 5ª levanta 401 (chave inválida)."""
+
+    def __init__(self, saidas_por_texto):
+        self.ok = ClienteEspelho(saidas_por_texto)
+        self.messages = self
+        self.chamadas = 0
+
+    def create(self, **kwargs):
+        self.chamadas += 1
+        if self.chamadas == 5:
+            resposta = httpx2.Response(401, request=httpx2.Request("POST", "https://x"))
+            raise anthropic.APIStatusError("SEGREDO", response=resposta, body=None)
+        return self.ok.create(**kwargs)
+
+
+def _saidas_do_gabarito(dev):
+    return {a["texto"]: {"categorias": a["categorias"], "criticidade": a["criticidade"]}
+            for a in dev}
+
+
+def test_rodar_aborta_inteira_em_erro_permanente(dev):
+    cliente = ClienteQueFalhaNaQuinta(_saidas_do_gabarito(dev))
+    with pytest.raises(ErroPermanenteDaAPI):
+        rodar(dev, cliente, "PROMPT", rodadas=3)
+    assert cliente.chamadas == 5  # nenhuma repetição e nenhuma chamada depois do erro
+
+
+def test_main_aborta_sem_gravar_nada_em_erro_permanente(dev, tmp_path, monkeypatch):
+    from ajuste import rodar_dev
+
+    pasta = tmp_path / "relatorios"
+    monkeypatch.setattr(rodar_dev, "RELATORIOS", pasta)
+    monkeypatch.setattr(rodar_dev, "criar_cliente",
+                        lambda: ClienteQueFalhaNaQuinta(_saidas_do_gabarito(dev)))
+    with pytest.raises(SystemExit) as exc:
+        rodar_dev.main(["--versao", "v0", "--rodadas", "1"])
+    assert "401" in str(exc.value)
+    assert "SEGREDO" not in str(exc.value)
+    assert not pasta.exists() or list(pasta.iterdir()) == []
+
+
+def test_main_recusa_sobrescrever_e_valida_rodadas(tmp_path, monkeypatch):
+    from ajuste import rodar_dev
+
+    pasta = tmp_path / "relatorios"
+    pasta.mkdir()
+    (pasta / "v0.md").write_text("antigo", encoding="utf-8")
+    monkeypatch.setattr(rodar_dev, "RELATORIOS", pasta)
+    monkeypatch.setattr(rodar_dev, "criar_cliente",
+                        lambda: pytest.fail("não deve criar cliente"))
+    with pytest.raises(SystemExit):
+        rodar_dev.main(["--versao", "v0", "--rodadas", "1"])
+    with pytest.raises(SystemExit):
+        rodar_dev.main(["--versao", "v0", "--rodadas", "0"])
+    assert (pasta / "v0.md").read_text(encoding="utf-8") == "antigo"
 
 
 def test_data_em_sao_paulo_tem_offset():

@@ -304,6 +304,87 @@ def test_registro_nao_guarda_texto_bruto_de_json_invalido():
     assert "SEGREDO" not in repr(r)
 
 
+# ---------- status HTTP: o que repete e o que aborta ----------
+
+def _erro_status(status, mensagem="falha", request_id="req_x"):
+    resposta_http = httpx2.Response(status, request=_req(), headers={"request-id": request_id})
+    return anthropic.APIStatusError(mensagem, response=resposta_http, body=None)
+
+
+def test_limite_entre_499_e_500():
+    # 499 aborta; 500 repete (o limite dos 5xx).
+    with pytest.raises(classificador.ErroPermanenteDaAPI):
+        classificar("texto", ClienteFalso([_erro_status(499), ok()]), PROMPT)
+    cliente = ClienteFalso([_erro_status(500), ok()])
+    assert classificar("texto", cliente, PROMPT)["tentativas"] == 2
+
+
+@pytest.mark.parametrize("status", [408, 409, 429, 500, 502, 503, 529])
+def test_status_repetivel_gera_nova_tentativa(status):
+    cliente = ClienteFalso([_erro_status(status), ok(["atraso"])])
+    r = classificar("texto", cliente, PROMPT)
+    assert r["saida"] == {"categorias": ["atraso"], "criticidade": []}
+    assert r["tentativas"] == 2
+    assert r["erros"][0]["status"] == status
+    assert len(cliente.chamadas) == 2
+
+
+def test_status_repetivel_esgotado_vira_none_sem_abortar():
+    cliente = ClienteFalso([_erro_status(503) for _ in range(3)])
+    r = classificar("texto", cliente, PROMPT)
+    assert r["saida"] is None
+    assert r["tentativas"] == MAX_TENTATIVAS
+    assert len(cliente.chamadas) == 3
+
+
+@pytest.mark.parametrize("status", [400, 401, 402, 403, 404, 413, 422, 499])
+def test_status_permanente_aborta_sem_repetir(status):
+    cliente = ClienteFalso([_erro_status(status, request_id="req_perm"), ok()])
+    with pytest.raises(classificador.ErroPermanenteDaAPI) as exc:
+        classificar("texto", cliente, PROMPT)
+    assert len(cliente.chamadas) == 1
+    assert exc.value.status == status
+    assert exc.value.request_id == "req_perm"
+
+
+def test_status_permanente_depois_de_erro_repetivel_tambem_aborta():
+    cliente = ClienteFalso([_erro_status(429), _erro_status(401), ok()])
+    with pytest.raises(classificador.ErroPermanenteDaAPI):
+        classificar("texto", cliente, PROMPT)
+    assert len(cliente.chamadas) == 2
+
+
+def test_erro_permanente_nao_vaza_mensagem_nem_corpo():
+    cliente = ClienteFalso([_erro_status(401, mensagem="SEGREDO sk-falso")])
+    with pytest.raises(classificador.ErroPermanenteDaAPI) as exc:
+        classificar("texto", cliente, PROMPT)
+    assert "SEGREDO" not in str(exc.value) and "SEGREDO" not in repr(exc.value)
+    assert "401" in str(exc.value)
+
+
+def test_erro_permanente_nao_guarda_o_erro_original_em_nenhum_lugar():
+    import traceback
+
+    segredo = "SEGREDO-NA-MENSAGEM sk-falso"
+    cliente = ClienteFalso([_erro_status(401, mensagem=segredo)])
+    with pytest.raises(classificador.ErroPermanenteDaAPI) as exc:
+        classificar("texto", cliente, PROMPT)
+    e = exc.value
+    # Levantada fora do bloco except: nada de contexto implícito nem causa explícita.
+    assert e.__context__ is None
+    assert e.__cause__ is None
+    completo = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+    for texto_visivel in (str(e), repr(e), completo, repr(e.args)):
+        assert "SEGREDO" not in texto_visivel and "sk-falso" not in texto_visivel
+    assert "401" in completo
+
+
+def test_erro_permanente_nao_e_value_error_nem_api_error():
+    # Não pode ser capturado por engano como falha técnica comum.
+    assert not issubclass(classificador.ErroPermanenteDaAPI, anthropic.APIError)
+    assert issubclass(classificador.ErroPermanenteDaAPI, Exception)
+
+
 # ---------- cliente real (construído sem rede e sem ler o .env) ----------
 
 def test_criar_cliente_sem_chave_encerra_sem_mostrar_valor(monkeypatch):
