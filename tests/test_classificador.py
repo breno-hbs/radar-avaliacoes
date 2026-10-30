@@ -362,6 +362,43 @@ def test_erro_permanente_nao_vaza_mensagem_nem_corpo():
     assert "401" in str(exc.value)
 
 
+# ---------- hash do prompt (texto como carregado por carregar_prompt) ----------
+
+def _prompt_em_pasta(tmp_path, monkeypatch, conteudo_bytes, nome="v9.md"):
+    monkeypatch.setattr(classificador, "PASTA_PROMPTS", tmp_path)
+    (tmp_path / nome).write_bytes(conteudo_bytes)
+
+
+def test_sha256_do_prompt_e_o_hash_do_texto_utf8_com_lf(tmp_path, monkeypatch):
+    import hashlib
+
+    texto_lf = "linha um\nlinha dois com acento: ação\n"
+    _prompt_em_pasta(tmp_path, monkeypatch, texto_lf.encode("utf-8"))
+    esperado = hashlib.sha256(texto_lf.encode("utf-8")).hexdigest()
+    assert classificador.sha256_do_prompt("v9") == esperado
+
+
+def test_sha256_do_prompt_nao_muda_com_crlf_no_arquivo(tmp_path, monkeypatch):
+    texto_lf = "linha um\nlinha dois com acento: ação\n"
+    _prompt_em_pasta(tmp_path, monkeypatch, texto_lf.encode("utf-8"), "v8.md")
+    _prompt_em_pasta(tmp_path, monkeypatch, texto_lf.replace("\n", "\r\n").encode("utf-8"), "v9.md")
+    assert classificador.sha256_do_prompt("v9") == classificador.sha256_do_prompt("v8")
+
+
+def test_sha256_do_prompt_e_do_mesmo_texto_que_carregar_prompt(tmp_path, monkeypatch):
+    import hashlib
+
+    _prompt_em_pasta(tmp_path, monkeypatch, "a\r\nb\r\n".encode("utf-8"))
+    carregado = classificador.carregar_prompt("v9")
+    assert "\r" not in carregado
+    assert classificador.sha256_do_prompt("v9") == hashlib.sha256(carregado.encode("utf-8")).hexdigest()
+
+
+def test_sha256_do_prompt_rejeita_versao_invalida():
+    with pytest.raises(ValueError):
+        classificador.sha256_do_prompt("../v0")
+
+
 def test_erro_permanente_nao_guarda_o_erro_original_em_nenhum_lugar():
     import traceback
 

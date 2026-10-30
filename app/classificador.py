@@ -2,7 +2,7 @@
 
 Dados simulados. Projeto independente, sem vínculo com o iFood.
 
-REGRA DE RETENTATIVA (v1; vale para o ajuste e para a avaliação):
+REGRA DE RETENTATIVA (regra de retentativa vigente; vale para o ajuste e para a avaliação):
 - Erro técnico REPETÍVEL é:
   (a) exceção anthropic.APIError sem resposta HTTP (tempo esgotado, falha de conexão) ou com
       status HTTP 408, 409, 429 ou 5xx;
@@ -26,6 +26,7 @@ conforme o caso. Nunca a mensagem da exceção, cabeçalhos ou o texto bruto da 
 
 O modelo recebe só o texto da avaliação (nada de nota, id, gabarito ou justificativa).
 """
+import hashlib
 import json
 import os
 import re
@@ -98,6 +99,16 @@ def carregar_prompt(versao):
     if not isinstance(versao, str) or not _VERSAO_VALIDA.fullmatch(versao):
         raise ValueError("versão do prompt deve ter a forma v0, v1, v2...")
     return (PASTA_PROMPTS / f"{versao}.md").read_text(encoding="utf-8")
+
+
+def sha256_do_prompt(versao):
+    """SHA-256 (hex) do texto do prompt tal como carregar_prompt o devolve (UTF-8, quebras LF).
+
+    Não depende de o arquivo ter CRLF no disco (Windows): carregar_prompt já lê com quebras
+    universais, e o texto enviado à API é esse. Ainda não é usado em nenhum fluxo (uso na fase 4.3).
+    """
+    texto = carregar_prompt(versao).replace(chr(13) + chr(10), chr(10))
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()
 
 
 def criar_cliente():
