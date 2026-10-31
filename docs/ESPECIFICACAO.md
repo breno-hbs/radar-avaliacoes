@@ -41,7 +41,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Fora das marcações:** ofensa e discriminação. O blog de parceiros do iFood informa que comentários ofensivos são descartados antes de chegar à loja ([fonte](https://blog-parceiros.ifood.com.br/avaliacoes-e-moderacoes/)), então o dono provavelmente nunca os veria.
 
-**Decisão tomada (30/10/2026):** `qualidade_temperatura` continua junta na v1. Na avaliação oficial, os 9 itens da categoria não tiveram erros nas 3 rodadas, mas a amostra é pequena. A categoria só é dividida se o dono precisar de ações diferentes ou se uma avaliação futura mostrar confusão com `atraso` e `embalagem`.
+**Decisão tomada (30/10/2026):** `qualidade_temperatura` continua junta na v1. Na avaliação oficial, os 9 itens da categoria nos 50 gerais não tiveram erros nas 3 rodadas, mas a amostra é pequena. A categoria só é dividida se o dono precisar de ações diferentes ou se uma avaliação futura mostrar confusão com `atraso` e `embalagem`.
 
 **Decisão tomada (30/10/2026), Fase 2:** uma avaliação com várias marcações críticas gera **um único alerta**, que lista todos os tipos identificados. O critério: a unidade do alerta é o que o dono precisa verificar, e ele verifica uma avaliação, não um tipo de marcação.
 
@@ -146,7 +146,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - `fator_tendencia` vale 1,25 quando a taxa de menções por 100 avaliações aumentou em relação à semana anterior. Nos demais casos (taxa igual, taxa menor ou semana anterior não comparável, isto é, inexistente ou com menos de N avaliações) vale 1,0. O aumento é estrito: qualquer taxa maior conta, sem tolerância. A primeira semana do histórico não tem semana anterior. A comparação usa a taxa por 100 avaliações, e não a quantidade absoluta, para que uma semana com mais avaliações não conte como crescimento.
 - Nesta configuração inicial nenhuma categoria tem peso 1.
 - `entregador` não ocupa um dos três cards, porque o restaurante não tem ação interna definida para ele. As menções continuam contadas e visíveis em "temas monitorados sem ação".
-- Limitação deliberada: `qualidade_temperatura` reúne problemas de intensidades diferentes e todos recebem o mesmo peso 3. A decisão em aberto sobre dividir a categoria está na seção "Categorias e criticidade".
+- Limitação deliberada: `qualidade_temperatura` reúne problemas de intensidades diferentes e todos recebem o mesmo peso 3. A decisão sobre dividir a categoria está na seção "Categorias e criticidade".
 - Os casos com marcação crítica seguem o fluxo próprio de alertas, independentemente do ranking semanal.
 
 **Decisão tomada (31/10/2026), Fase 2:** complemento do ranking dos cards semanais: desempate, amostra mínima e definições de cálculo. Como na decisão anterior, os valores são hipóteses configuráveis da v1, sem validação com dados reais.
