@@ -14,6 +14,7 @@ Variáveis de ambiente (nunca no código nem no Git):
 """
 
 import hmac
+import json
 import logging
 import os
 import re
@@ -21,13 +22,14 @@ import threading
 from contextlib import asynccontextmanager, closing
 from datetime import date, datetime, time, timedelta, timezone
 from functools import lru_cache
-from typing import Optional
+from typing import Literal, Optional
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
-from pydantic import BaseModel, Field, StrictInt, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, ValidationError, field_validator, model_validator
+from starlette.concurrency import run_in_threadpool
 
 from app import (
     alertas, banco, classificador, config_ranking, consultas, ranking, resumo, semana, telegram, tokens, trechos,
@@ -240,6 +242,140 @@ def _cards_do_painel(semana_param, relogio, config) -> dict:
     }
 
 
+# ---------- ações do painel (bloco 4.2) ----------
+
+LIMITE_NOTA = 500
+MAIOR_ID = 2 ** 63 - 1  # maior inteiro do SQLite: acima disso o sqlite3 levantaria OverflowError
+_ID_ASCII = re.compile(r"-?[0-9]+", re.ASCII)  # inteiro em dígitos ASCII; negativo existe como inteiro (404)
+
+
+class Conflito(Exception):
+    """409 com o corpo no topo (id e estado da ação existente, ou o estado atual na transição inválida)."""
+
+    def __init__(self, conteudo: dict):
+        super().__init__("conflito")
+        self.conteudo = conteudo
+
+
+class EvidenciaDaAcao(BaseModel):
+    """Só avaliacao_id e posicao: o trecho é derivado pelo servidor; qualquer outro campo é recusado."""
+
+    model_config = ConfigDict(extra="forbid")
+    avaliacao_id: StrictInt = Field(ge=1, le=MAIOR_ID)
+    posicao: StrictInt = Field(ge=1, le=3)
+
+
+class NovaAcao(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    categoria: StrictStr
+    semana_inicio: StrictStr
+    evidencias: list[EvidenciaDaAcao] = Field(min_length=1, max_length=3)
+    nota: Optional[StrictStr] = Field(None, max_length=LIMITE_NOTA)
+
+    @model_validator(mode="after")
+    def _distintas(self):
+        if len({e.posicao for e in self.evidencias}) != len(self.evidencias):
+            raise ValueError("as posições das evidências devem ser distintas")
+        if len({e.avaliacao_id for e in self.evidencias}) != len(self.evidencias):
+            raise ValueError("as avaliações das evidências devem ser distintas")
+        return self
+
+
+class MudancaDaAcao(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    estado: Optional[Literal["pendente", "em_andamento", "concluida"]] = None
+    nota: Optional[StrictStr] = Field(None, max_length=LIMITE_NOTA)
+
+    @model_validator(mode="after")
+    def _pelo_menos_um(self):
+        if not self.model_fields_set:
+            raise ValueError("informe estado e/ou nota")
+        if "estado" in self.model_fields_set and self.estado is None:
+            raise ValueError("estado não pode ser nulo")
+        return self
+
+
+async def _corpo_validado(request: Request, modelo):
+    """Lê e valida o corpo DEPOIS do token (o FastAPI validaria antes das dependências). Só mensagens curtas."""
+    try:
+        dados = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=422, detail="o corpo deve ser um JSON válido") from None
+    try:
+        return modelo.model_validate(dados)
+    except ValidationError as e:
+        # Só o local e o tipo de cada erro: nunca o valor enviado (pode ser a nota ou texto do cliente).
+        raise HTTPException(
+            status_code=422, detail=[{"campo": ".".join(map(str, x["loc"])), "erro": x["type"]} for x in e.errors()]
+        ) from None
+
+
+def _acao_json(acao: dict) -> dict:
+    return {
+        "id": acao["id"],
+        "categoria": acao["categoria"],
+        "semana_inicio": _em_sao_paulo(acao["semana_inicio"]),
+        "estado": acao["estado"],
+        "criada_em": _em_sao_paulo(acao["criada_em"]),
+        "concluida_em": _em_sao_paulo(acao["concluida_em"]),
+        "nota": acao["nota"],
+        "evidencias": acao["evidencias"],
+    }
+
+
+def _registrar_acao(nova: NovaAcao, relogio, config) -> dict:
+    agora = relogio()
+    if nova.categoria not in config.pesos:  # entregador e categorias desconhecidas não participam do ranking
+        raise HTTPException(status_code=422, detail="categoria não participa do ranking")
+    inicio = _semana_pedida(nova.semana_inicio)
+    if inicio > semana.inicio_da_semana(agora):
+        raise HTTPException(status_code=422, detail="semana_inicio não pode ser posterior à semana atual")
+    caminho = _caminho_do_banco_existente()
+    inicio_utc, fim_utc = semana.intervalo_utc(inicio)
+    with closing(banco.abrir(caminho)) as conn:
+        evidencias = []
+        for e in sorted(nova.evidencias, key=lambda x: x.posicao):
+            linha = conn.execute(
+                "SELECT texto, recebida_em, categorias FROM avaliacoes WHERE id = ?", (e.avaliacao_id,)
+            ).fetchone()
+            if linha is None:
+                raise HTTPException(status_code=422, detail="evidência: avaliação inexistente")
+            recebida = datetime.fromisoformat(linha["recebida_em"])
+            if not (inicio_utc <= recebida < fim_utc):
+                raise HTTPException(status_code=422, detail="evidência: avaliação de outra semana")
+            if nova.categoria not in json.loads(linha["categorias"]):
+                raise HTTPException(status_code=422, detail="evidência: avaliação de outra categoria")
+            evidencias.append((e.avaliacao_id, e.posicao, trechos.trecho(linha["texto"])))  # derivado aqui
+        try:
+            acao_id = banco.registrar_acao(
+                conn, categoria=nova.categoria, semana_inicio=inicio_utc.isoformat(),
+                criada_em=agora.isoformat(), nota=nova.nota, evidencias=evidencias,
+            )
+        except banco.AcaoDuplicada as dup:
+            raise Conflito({
+                "detail": "já existe uma ação para esta categoria e semana", "id": dup.acao_id, "estado": dup.estado,
+            }) from None
+        return _acao_json(banco.buscar_acao(conn, acao_id))
+
+
+def _mudar_acao(acao_id_texto: str, mudanca: MudancaDaAcao, relogio) -> dict:
+    # Só dígitos ASCII: int() aceitaria " 7", "+7", "1_0" e dígitos de outras escritas.
+    if not _ID_ASCII.fullmatch(acao_id_texto):
+        raise HTTPException(status_code=422, detail="o id da ação deve ser um inteiro")
+    acao_id = int(acao_id_texto)
+    if acao_id > MAIOR_ID:  # não cabe no banco: não existe
+        raise HTTPException(status_code=404, detail="ação não encontrada")
+    campos = {k: getattr(mudanca, k) for k in mudanca.model_fields_set}
+    with closing(banco.abrir(_caminho_do_banco_existente())) as conn:
+        try:
+            banco.mudar_acao(conn, acao_id, agora=relogio().isoformat(), **campos)
+        except banco.AcaoInexistente:
+            raise HTTPException(status_code=404, detail="ação não encontrada") from None
+        except banco.TransicaoInvalida as t:
+            raise Conflito({"detail": "transição inválida", "estado": t.estado}) from None
+        return _acao_json(banco.buscar_acao(conn, acao_id))
+
+
 def _caminho_do_painel(request) -> bool:
     return request.url.path.startswith("/api/painel/")
 
@@ -429,6 +565,10 @@ def criar_app(*, recuperar_na_subida=None) -> FastAPI:
             cabecalhos["Cache-Control"] = "no-store"
         return JSONResponse(status_code=500, content={"detail": "falha interna"}, headers=cabecalhos)
 
+    @app.exception_handler(Conflito)
+    async def conflito(request: Request, erro: Conflito):
+        return JSONResponse(status_code=409, content=erro.conteudo)
+
     @app.exception_handler(ErroDeConfiguracao)
     async def configuracao_ausente(request: Request, erro: ErroDeConfiguracao):
         # A mensagem diz qual variável falta ou está inválida, nunca o valor dela.
@@ -473,6 +613,24 @@ def criar_app(*, recuperar_na_subida=None) -> FastAPI:
     def painel_historico(resposta: Response, token: str = Depends(exigir_token)):
         resposta.headers["Cache-Control"] = "no-store"
         return _historico_do_painel()
+
+    # Ações do painel (bloco 4.2): o corpo é lido no handler, DEPOIS de exigir_token, para que um link
+    # inválido dê o 404 uniforme mesmo com corpo inválido (o FastAPI validaria o corpo antes).
+    @app.post("/api/painel/{token}/acoes", status_code=201)
+    async def painel_registrar_acao(
+        request: Request,
+        token: str = Depends(exigir_token),
+        relogio=Depends(obter_relogio),
+        config=Depends(obter_config_ranking),
+    ):
+        nova = await _corpo_validado(request, NovaAcao)
+        return await run_in_threadpool(_registrar_acao, nova, relogio, config)
+
+    @app.patch("/api/painel/{token}/acoes/{acao_id}")
+    async def painel_mudar_acao(request: Request, acao_id: str, token: str = Depends(exigir_token),
+                                relogio=Depends(obter_relogio)):
+        mudanca = await _corpo_validado(request, MudancaDaAcao)
+        return await run_in_threadpool(_mudar_acao, acao_id, mudanca, relogio)
 
     @com_chave.post("/alertas/reenviar")
     def reenviar_alertas(notificador=Depends(obter_notificador), relogio=Depends(obter_relogio)):

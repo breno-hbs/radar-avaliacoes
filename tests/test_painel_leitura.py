@@ -158,10 +158,10 @@ def test_critica_marcada_como_relato_a_verificar(cliente, ambiente, token):
     assert set(evid[critica]) == {"avaliacao_id", "posicao", "trecho", "nota", "critica"}
 
 
-def test_card_com_acao_traz_id_e_estado_da_mais_recente(cliente, ambiente, token):
+def test_card_com_acao_traz_id_e_estado(cliente, ambiente, token):
+    # bloco 4.2: só pode haver uma ação por (categoria, semana); antes este teste gravava duas
     _varias(ambiente, 20)
     _avaliacao(ambiente, SEGUNDA + timedelta(days=1))
-    _acao(ambiente, "atraso", INICIO_UTC, "pendente")
     _acao(ambiente, "atraso", INICIO_UTC, "em_andamento")
     mais_recente = _linhas(ambiente, "acoes")[-1]["id"]
     _acao(ambiente, "atraso", "2026-10-19T03:00:00+00:00", "concluida")  # outra semana: não conta
