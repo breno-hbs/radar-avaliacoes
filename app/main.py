@@ -1,11 +1,13 @@
-"""API do Radar de Avaliações. POST /avaliacoes (bloco 2.2), alerta crítico via Telegram (bloco 2.3)
-e token do painel (bloco 2.5: dependência exigir_token, Referrer-Policy e filtro do log de acesso).
+"""API do Radar de Avaliações. POST /avaliacoes (bloco 2.2), alerta crítico via Telegram (bloco 2.3),
+token do painel (bloco 2.5: dependência exigir_token, Referrer-Policy e filtro do log de acesso) e
+GET /resumo-semanal (bloco 2.7).
 
-Fonte da verdade: docs/ESPECIFICACAO.md. Servidor: uvicorn app.main:app
+Fonte da verdade: docs/ESPECIFICACAO.md. Servidor: uvicorn app.main:app --env-file .env
 
 Variáveis de ambiente (nunca no código nem no Git):
 - RADAR_API_KEY: chave esperada no cabeçalho X-API-Key. Ausente ou vazia, toda requisição é recusada.
 - RADAR_DB: caminho do arquivo SQLite.
+- RADAR_URL_BASE: endereço público do app (http ou https, sem barra final), base do link do painel.
 - ANTHROPIC_API_KEY: lida por app/classificador.py (criar_cliente) a partir do .env.
 - RADAR_TELEGRAM_TOKEN e RADAR_TELEGRAM_CHAT_ID: lidas por app/telegram.py a partir do .env.
 """
@@ -13,17 +15,19 @@ Variáveis de ambiente (nunca no código nem no Git):
 import hmac
 import logging
 import os
+import re
 from contextlib import closing
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from functools import lru_cache
 from typing import Optional
+from urllib.parse import urlsplit
 
-from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, StrictInt, StrictStr, field_validator
 
-from app import alertas, banco, classificador, telegram, tokens
+from app import alertas, banco, classificador, config_ranking, consultas, ranking, resumo, semana, telegram, tokens
 from app.classificador import ErroPermanenteDaAPI, ErroTecnicoEsgotado
 
 VERSAO_PROMPT = "v1"  # prompt congelado (prompts/classificador/v1.md)
@@ -145,6 +149,85 @@ def obter_relogio():
     return _agora_utc
 
 
+def obter_config_ranking():
+    """Dependência substituível: a configuração do ranking, lida e validada a cada resumo."""
+    return config_ranking.carregar_config()
+
+
+_DATA = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
+
+
+def _semana_pedida(texto: str) -> datetime:
+    """?semana=AAAA-MM-DD, que precisa ser uma segunda-feira (data local de São Paulo)."""
+    if not _DATA.fullmatch(texto):
+        raise HTTPException(status_code=422, detail="semana deve ser uma data AAAA-MM-DD")
+    try:
+        dia = date.fromisoformat(texto)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="semana deve ser uma data AAAA-MM-DD") from None
+    if dia.weekday() != 0:
+        raise HTTPException(status_code=422, detail="semana deve ser uma segunda-feira (AAAA-MM-DD)")
+    inicio = datetime.combine(dia, time(0), semana.FUSO)
+    try:  # a semana anterior e o fim precisam caber no calendário
+        semana.intervalo_utc(inicio - timedelta(days=7))
+        semana.intervalo_utc(inicio)
+    except OverflowError:
+        raise HTTPException(status_code=422, detail="semana fora do intervalo aceito") from None
+    return inicio
+
+
+def _url_base() -> str:
+    """RADAR_URL_BASE: http ou https, com host, sem barra final, sem query nem fragmento."""
+    valor = os.environ.get("RADAR_URL_BASE", "")
+    partes = urlsplit(valor)
+    if (
+        partes.scheme not in ("http", "https")
+        or not partes.netloc
+        or valor.endswith("/")
+        or "?" in valor
+        or "#" in valor
+        or any(c.isspace() for c in valor)
+    ):
+        raise ErroDeConfiguracao("RADAR_URL_BASE ausente ou inválida")
+    return valor
+
+
+def _resumo_semanal(semana_param, relogio, config) -> dict:
+    agora = relogio()  # lido uma vez: semana padrão e criado_em do token usam o mesmo instante
+    inicio = _semana_pedida(semana_param) if semana_param is not None else semana.ultima_semana_completa(agora)
+    url_base = _url_base()  # antes de qualquer gravação: sem URL válida, nenhum token é criado
+    caminho = os.environ.get("RADAR_DB")
+    if not caminho:
+        raise ErroDeConfiguracao("RADAR_DB não definida")
+    if not os.path.isfile(caminho):  # banco.abrir criaria um banco vazio e o resumo sairia "0 lidas"
+        raise ErroDeConfiguracao("RADAR_DB aponta para um arquivo que não existe")
+    inicio_anterior = datetime.combine(inicio.date() - timedelta(days=7), time(0), semana.FUSO)
+
+    with closing(banco.abrir(caminho)) as conn:
+        # As quatro leituras veem o mesmo estado do banco (um POST no meio não divide a contagem).
+        conn.execute("BEGIN")
+        try:
+            intervalo = semana.intervalo_utc(inicio)
+            atual = consultas.contar_semana(conn, *intervalo)
+            anterior = consultas.contar_semana(conn, *semana.intervalo_utc(inicio_anterior))
+            criticos = consultas.listar_criticos(conn, *intervalo)
+            acoes = consultas.listar_acoes_pendentes(conn)
+        finally:
+            conn.execute("COMMIT")  # só leitura: nada a desfazer; libera antes do BEGIN IMMEDIATE do token
+        resultado = ranking.calcular_ranking(atual, anterior if anterior.total > 0 else None, config)
+        enviar = resumo.deve_enviar(resultado, criticos, acoes, config)
+
+        def montar(link):
+            return resumo.montar(inicio, resultado, criticos, acoes, amostra_minima=config.amostra_minima,
+                                 enviar=enviar, link_painel=link)
+
+        corpo = montar(None)  # tudo calculado e montado antes do token: uma falha aqui não deixa token
+        if not enviar:
+            return corpo
+        token = tokens.criar_token_painel(conn, agora=agora)  # a única escrita da rota
+    return montar(f"{url_base}/painel/{token}")
+
+
 def exigir_token(token: str, relogio=Depends(obter_relogio)) -> str:
     """Dependência para rotas com {token} no caminho.
 
@@ -223,6 +306,33 @@ def criar_app() -> FastAPI:
         return JSONResponse(
             status_code=500, content={"detail": "falha interna"}, headers={"Referrer-Policy": "no-referrer"}
         )
+
+    @app.exception_handler(ErroDeConfiguracao)
+    async def configuracao_ausente(request: Request, erro: ErroDeConfiguracao):
+        # A mensagem diz qual variável falta ou está inválida, nunca o valor dela.
+        logger.error("configuração do servidor: %s", erro)
+        return JSONResponse(
+            status_code=500, content={"detail": "falha interna"}, headers={"Referrer-Policy": "no-referrer"}
+        )
+
+    @app.exception_handler(config_ranking.ErroNaConfiguracao)
+    async def configuracao_invalida(request: Request, erro: config_ranking.ErroNaConfiguracao):
+        # A mensagem da validação é curta e só fala da configuração: pode ir para o log.
+        logger.error("configuração do ranking inválida: %s", erro)
+        return JSONResponse(
+            status_code=500, content={"detail": "falha interna"}, headers={"Referrer-Policy": "no-referrer"}
+        )
+
+    @com_chave.get("/resumo-semanal")
+    def resumo_semanal(
+        resposta: Response,
+        semana_param: Optional[str] = Query(None, alias="semana"),
+        relogio=Depends(obter_relogio),
+        config=Depends(obter_config_ranking),
+    ):
+        # Cria um token novo a cada chamada com algo a enviar: a resposta não pode ficar em cache.
+        resposta.headers["Cache-Control"] = "no-store"
+        return _resumo_semanal(semana_param, relogio, config)
 
     @com_chave.post("/avaliacoes", status_code=201)
     def receber_avaliacao(

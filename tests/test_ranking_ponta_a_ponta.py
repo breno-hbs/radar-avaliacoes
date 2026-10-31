@@ -32,8 +32,11 @@ SP = ZoneInfo("America/Sao_Paulo")
 SEGUNDAS = [datetime(2026, 10, 5, tzinfo=SP) + timedelta(weeks=i) for i in range(4)]
 
 
-@pytest.fixture(scope="module")
-def contagens(tmp_path_factory):
+def montar_banco_85(caminho):
+    """Grava as 85 avaliações com a classificação do gabarito e as datas do simulador (semente 42).
+
+    Usado também por tests/test_resumo_semanal.py. O alerta de cada crítica nasce no recebida_em.
+    """
     gabarito = {}
     for nome in simulador.ARQUIVOS:
         for item in json.loads((RAIZ / "data" / nome).read_text(encoding="utf-8")):
@@ -41,15 +44,22 @@ def contagens(tmp_path_factory):
     cronograma = simulador.montar_cronograma(
         simulador.carregar_avaliacoes(), semente=42, semanas=4, semana_inicio=date(2026, 10, 5)
     )
-    caminho = tmp_path_factory.mktemp("ponta") / "radar.db"
     with closing(banco.abrir(caminho)) as conn:
         for corpo in cronograma:
             g = gabarito[corpo["id_externo"]]
             banco.gravar_avaliacao(
                 conn, id_externo=corpo["id_externo"], texto=corpo["texto"], nota=corpo["nota"],
                 recebida_em=corpo["recebida_em"], categorias=g["categorias"], criticidade=g["criticidade"],
-                status_classificacao="ok",
+                status_classificacao="ok", alerta_criado_em=corpo["recebida_em"],
             )
+    return gabarito, cronograma
+
+
+@pytest.fixture(scope="module")
+def contagens(tmp_path_factory):
+    caminho = tmp_path_factory.mktemp("ponta") / "radar.db"
+    montar_banco_85(caminho)
+    with closing(banco.abrir(caminho)) as conn:
         return [consultas.contar_semana(conn, *semana.intervalo_utc(s)) for s in SEGUNDAS]
 
 

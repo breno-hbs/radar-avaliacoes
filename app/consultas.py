@@ -40,3 +40,37 @@ def contar_semana(conn, inicio_utc: datetime, fim_utc: datetime) -> ContagemSema
         invalidas += status == "invalida"
         negativas += nota <= NOTA_NEGATIVA_MAXIMA
     return ContagemSemana(total=len(linhas), mencoes=dict(mencoes), invalidas=invalidas, negativas=negativas)
+
+
+def listar_criticos(conn, inicio_utc: datetime, fim_utc: datetime) -> list:
+    """Avaliações da semana com marcação crítica: id_externo, tipos e estado do alerta (ou None).
+
+    Sem o texto da avaliação. A semana segue a mesma regra de contar_semana.
+    """
+    inicio, fim = _utc_texto(inicio_utc, "inicio_utc"), _utc_texto(fim_utc, "fim_utc")
+    if inicio_utc >= fim_utc:
+        raise ValueError("o intervalo precisa ter início antes do fim")
+    linhas = conn.execute(
+        "SELECT a.id_externo, a.criticidade, al.estado FROM avaliacoes a "
+        "LEFT JOIN alertas al ON al.avaliacao_id = a.id "
+        "WHERE a.recebida_em >= ? AND a.recebida_em < ? ORDER BY a.recebida_em, a.id",
+        (inicio, fim),
+    ).fetchall()
+    criticos = []
+    for id_externo, criticidade, estado in linhas:
+        tipos = json.loads(criticidade)
+        if tipos:
+            criticos.append({"id_externo": id_externo, "tipos": tipos, "estado_alerta": estado})
+    return criticos
+
+
+ESTADOS_ACAO_PENDENTE = ("pendente", "em_andamento")
+
+
+def listar_acoes_pendentes(conn) -> list:
+    """Ações ainda não concluídas (pendente ou em_andamento), de qualquer semana."""
+    linhas = conn.execute(
+        "SELECT categoria, semana_inicio, estado FROM acoes WHERE estado IN (?, ?) ORDER BY semana_inicio, id",
+        ESTADOS_ACAO_PENDENTE,
+    ).fetchall()
+    return [{"categoria": c, "semana_inicio": s, "estado": e} for c, s, e in linhas]
