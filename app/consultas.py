@@ -111,3 +111,81 @@ def listar_acoes_pendentes(conn) -> list:
         ESTADOS_ACAO_PENDENTE,
     ).fetchall()
     return [{"categoria": c, "semana_inicio": s, "estado": e} for c, s, e in linhas]
+
+
+# ---------- painel (bloco 4.1) ----------
+
+MAX_EVIDENCIAS = 3
+MAX_SEMANAS_HISTORICO = 12
+
+
+def listar_evidencias(conn, inicio_utc: datetime, fim_utc: datetime, categoria: str) -> list:
+    """Até 3 avaliações da semana com a categoria: menor nota, depois recebida_em mais recente, depois id.
+
+    Críticas entram, com `critica` verdadeiro (relato a verificar). Devolve o texto inteiro: quem chama
+    deriva o trecho com app/trechos.py.
+    """
+    inicio, fim = _utc_texto(inicio_utc, "inicio_utc"), _utc_texto(fim_utc, "fim_utc")
+    linhas = conn.execute(
+        "SELECT id, texto, nota, recebida_em, categorias, criticidade FROM avaliacoes "
+        "WHERE recebida_em >= ? AND recebida_em < ?",
+        (inicio, fim),
+    ).fetchall()
+    da_categoria = [l for l in linhas if categoria in json.loads(l["categorias"])]
+    # menor nota; entre iguais, a mais recente (recebida_em decrescente); entre iguais, o menor id
+    da_categoria.sort(key=lambda l: l["id"])
+    da_categoria.sort(key=lambda l: l["recebida_em"], reverse=True)
+    da_categoria.sort(key=lambda l: l["nota"])
+    return [
+        {"avaliacao_id": l["id"], "texto": l["texto"], "nota": l["nota"], "critica": bool(json.loads(l["criticidade"]))}
+        for l in da_categoria[:MAX_EVIDENCIAS]
+    ]
+
+
+def acao_da_semana(conn, categoria: str, semana_inicio_utc: datetime):
+    """{id, estado} da ação mais recente da categoria na semana, ou None.
+
+    acoes.semana_inicio guarda o início da semana em UTC (ISO com +00:00), como o limite inicial da semana.
+    """
+    linha = conn.execute(
+        "SELECT id, estado FROM acoes WHERE categoria = ? AND semana_inicio = ? ORDER BY id DESC LIMIT 1",
+        (categoria, _utc_texto(semana_inicio_utc, "semana_inicio_utc")),
+    ).fetchone()
+    return None if linha is None else {"id": linha[0], "estado": linha[1]}
+
+
+def ultima_leitura(conn):
+    """recebida_em mais recente do banco, em ISO com fuso America/Sao_Paulo, ou None sem avaliações."""
+    valor = conn.execute("SELECT MAX(recebida_em) FROM avaliacoes").fetchone()[0]
+    return None if valor is None else datetime.fromisoformat(valor).astimezone(semana.FUSO).isoformat()
+
+
+def listar_historico(conn) -> list:
+    """Semanas com pelo menos uma ação, da mais recente à mais antiga, no máximo 12.
+
+    Cada ação traz as evidências gravadas (trecho_exibido NUNCA recalculado) e o texto original da avaliação.
+    """
+    semanas = [l[0] for l in conn.execute(
+        "SELECT DISTINCT semana_inicio FROM acoes ORDER BY semana_inicio DESC LIMIT ?", (MAX_SEMANAS_HISTORICO,)
+    )]
+    resultado = []
+    for semana_inicio in semanas:
+        acoes = []
+        for a in conn.execute(
+            "SELECT id, categoria, estado, criada_em, concluida_em, nota FROM acoes WHERE semana_inicio = ? "
+            "ORDER BY id", (semana_inicio,),
+        ).fetchall():
+            evidencias = [
+                {"posicao": p, "trecho_exibido": t, "texto_original": o}
+                for p, t, o in conn.execute(
+                    "SELECT ae.posicao, ae.trecho_exibido, v.texto FROM acao_avaliacoes ae "
+                    "LEFT JOIN avaliacoes v ON v.id = ae.avaliacao_id WHERE ae.acao_id = ? ORDER BY ae.posicao",
+                    (a["id"],),
+                )
+            ]
+            acoes.append({
+                "id": a["id"], "categoria": a["categoria"], "estado": a["estado"], "criada_em": a["criada_em"],
+                "concluida_em": a["concluida_em"], "nota": a["nota"], "evidencias": evidencias,
+            })
+        resultado.append({"semana_inicio": semana_inicio, "acoes": acoes})
+    return resultado

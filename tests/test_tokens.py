@@ -1,8 +1,9 @@
 """Testes do token do painel (bloco 2.5).
 
 Fonte da verdade: docs/ESPECIFICACAO.md (regras de segurança, tabela tokens_painel). Ponto de risco
-do CLAUDE.md: expiração do link. Não há rota de painel real (Fase 4): a rota abaixo é montada só no
-teste. O token TOKEN_FALSO é fictício e existe só nestes testes.
+do CLAUDE.md: expiração do link. Estes testes usam uma rota montada só no teste; as rotas reais de leitura do
+painel (bloco 4.1) têm testes próprios em test_painel_leitura.py. O token TOKEN_FALSO é fictício e existe só
+nestes testes.
 """
 
 import hashlib
@@ -280,9 +281,12 @@ def test_referrer_policy_em_200_404_e_401(cenario):
     )} == {200, 401}
 
 
-def test_nenhuma_rota_de_painel_real_existe():
-    caminhos = {getattr(r, "path", "") for r in main.criar_app().routes}
-    assert not any("painel" in c for c in caminhos)
+def test_rotas_de_painel_sao_so_as_de_leitura_do_bloco_4_1():
+    # Até o bloco 4.1 não havia rota de painel. Agora só as duas de leitura existem; POST/PATCH de ações e a
+    # página HTML (GET /painel/{token}) ficam para os blocos seguintes.
+    rotas = {(getattr(r, "path", ""), m) for r in main.criar_app().routes for m in getattr(r, "methods", ())}
+    do_painel = {(p, m) for p, m in rotas if "painel" in p}
+    assert do_painel == {("/api/painel/{token}/cards", "GET"), ("/api/painel/{token}/historico", "GET")}
 
 
 # ---------- segredo nos logs ----------

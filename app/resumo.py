@@ -149,22 +149,32 @@ def _semana_da_acao(texto: str) -> str:
         return texto
 
 
+def card_json(c) -> dict:
+    """Um card do ranking como dado: nome curto, recomendação, taxa com 1 casa (só na borda), sem pontuação.
+
+    Usado pelo resumo e pelo GET /api/painel/{token}/cards.
+    """
+    return {
+        "categoria": c.categoria,
+        "mencoes": c.mencoes,
+        "taxa_por_100": float(_uma_casa(c.taxa_por_100)),
+        "tendencia_em_alta": c.fator_tendencia > 1,
+        "problema": PROBLEMAS[c.categoria],
+        "recomendacao": RECOMENDACOES[c.categoria],
+    }
+
+
+def cobertura(resultado) -> dict:
+    """A linha de cobertura fixa, a mesma no resumo e no painel."""
+    return _cobertura(resultado)
+
+
 def montar(inicio: datetime, resultado, criticos, acoes_pendentes, *, amostra_minima: int, enviar: bool,
            link_painel, invalidas=(), alertas_falhos=(), curto=False) -> dict:
     """JSON e mensagem do resumo. `curto`: só o volume pequeno motivou o envio (aviso curto, sem link)."""
     per = periodo(inicio)
     invalidas, alertas_falhos = list(invalidas), list(alertas_falhos)
-    cards = [
-        {
-            "categoria": c.categoria,
-            "mencoes": c.mencoes,
-            "taxa_por_100": float(_uma_casa(c.taxa_por_100)),
-            "tendencia_em_alta": c.fator_tendencia > 1,
-            "problema": PROBLEMAS[c.categoria],
-            "recomendacao": RECOMENDACOES[c.categoria],
-        }
-        for c in resultado.cards
-    ]
+    cards = [card_json(c) for c in resultado.cards]
     cobertura = _cobertura(resultado)
 
     linhas = ["(dados simulados)", f"Resumo semanal do Radar: {per['rotulo']}"]

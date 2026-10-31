@@ -29,7 +29,9 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, StrictInt, StrictStr, field_validator
 
-from app import alertas, banco, classificador, config_ranking, consultas, ranking, resumo, semana, telegram, tokens
+from app import (
+    alertas, banco, classificador, config_ranking, consultas, ranking, resumo, semana, telegram, tokens, trechos,
+)
 from app.classificador import ErroPermanenteDaAPI, ErroTecnicoEsgotado
 
 VERSAO_PROMPT = "v1"  # prompt congelado (prompts/classificador/v1.md)
@@ -194,6 +196,79 @@ def _url_base() -> str:
     return valor
 
 
+def _ranking_da_semana(conn, inicio: datetime, config):
+    """(resultado do ranking, intervalo UTC) da semana; a semana anterior vazia vai como None.
+
+    Comum ao resumo semanal e aos cards do painel: os dois calculam o ranking do mesmo jeito.
+    """
+    intervalo = semana.intervalo_utc(inicio)
+    inicio_anterior = datetime.combine(inicio.date() - timedelta(days=7), time(0), semana.FUSO)
+    atual = consultas.contar_semana(conn, *intervalo)
+    anterior = consultas.contar_semana(conn, *semana.intervalo_utc(inicio_anterior))
+    return ranking.calcular_ranking(atual, anterior if anterior.total > 0 else None, config), intervalo
+
+
+def _cards_do_painel(semana_param, relogio, config) -> dict:
+    """GET /api/painel/{token}/cards. Só lê o banco."""
+    inicio = _semana_pedida(semana_param) if semana_param is not None else semana.ultima_semana_completa(relogio())
+    caminho = _caminho_do_banco_existente()
+    with closing(banco.abrir(caminho)) as conn:
+        conn.execute("BEGIN")
+        try:
+            resultado, intervalo = _ranking_da_semana(conn, inicio, config)
+            cards = []
+            for c in resultado.cards:
+                card = resumo.card_json(c)
+                card["evidencias"] = [
+                    {"avaliacao_id": e["avaliacao_id"], "posicao": posicao, "trecho": trechos.trecho(e["texto"]),
+                     "nota": e["nota"], "critica": e["critica"]}
+                    for posicao, e in enumerate(consultas.listar_evidencias(conn, *intervalo, c.categoria), start=1)
+                ]
+                card["acao"] = consultas.acao_da_semana(conn, c.categoria, intervalo[0])
+                cards.append(card)
+            ultima = consultas.ultima_leitura(conn)
+        finally:
+            conn.execute("COMMIT")  # só leitura
+    cobertura = resumo.cobertura(resultado)
+    return {
+        "periodo": resumo.periodo(inicio),
+        "cards": cards,
+        "outros_temas": [{"categoria": c.categoria, "mencoes": c.mencoes} for c in resultado.outros_temas],
+        "temas_sem_acao": cobertura["temas_sem_acao"],
+        "cobertura": cobertura,
+        "ultima_leitura": ultima,
+    }
+
+
+def _caminho_do_painel(request) -> bool:
+    return request.url.path.startswith("/api/painel/")
+
+
+def _em_sao_paulo(texto):
+    """ISO gravado em UTC -> ISO com fuso America/Sao_Paulo (None continua None)."""
+    return None if texto is None else datetime.fromisoformat(texto).astimezone(semana.FUSO).isoformat()
+
+
+def _historico_do_painel() -> dict:
+    """GET /api/painel/{token}/historico. Só lê o banco; o trecho exibido é o gravado."""
+    with closing(banco.abrir(_caminho_do_banco_existente())) as conn:
+        conn.execute("BEGIN")  # as consultas do histórico veem o mesmo estado do banco
+        try:
+            semanas = consultas.listar_historico(conn)
+        finally:
+            conn.execute("COMMIT")  # só leitura
+    for s in semanas:
+        inicio_local = datetime.fromisoformat(s["semana_inicio"]).astimezone(semana.FUSO)
+        s["semana_inicio"] = inicio_local.isoformat()
+        s["rotulo"] = resumo.periodo(inicio_local)["rotulo"]
+    for s in semanas:
+        for a in s["acoes"]:  # o banco continua em UTC; a resposta sai no fuso de São Paulo
+            a["criada_em"] = _em_sao_paulo(a["criada_em"])
+            a["concluida_em"] = _em_sao_paulo(a["concluida_em"])
+    return {"semanas": [{"semana_inicio": s["semana_inicio"], "rotulo": s["rotulo"], "acoes": s["acoes"]}
+                        for s in semanas]}
+
+
 def _resumo_semanal(semana_param, relogio, config) -> dict:
     agora = relogio()  # lido uma vez: semana padrão e criado_em do token usam o mesmo instante
     inicio = _semana_pedida(semana_param) if semana_param is not None else semana.ultima_semana_completa(agora)
@@ -203,22 +278,17 @@ def _resumo_semanal(semana_param, relogio, config) -> dict:
         raise ErroDeConfiguracao("RADAR_DB não definida")
     if not os.path.isfile(caminho):  # banco.abrir criaria um banco vazio e o resumo sairia "0 lidas"
         raise ErroDeConfiguracao("RADAR_DB aponta para um arquivo que não existe")
-    inicio_anterior = datetime.combine(inicio.date() - timedelta(days=7), time(0), semana.FUSO)
-
     with closing(banco.abrir(caminho)) as conn:
-        # As quatro leituras veem o mesmo estado do banco (um POST no meio não divide a contagem).
+        # As leituras veem o mesmo estado do banco (um POST no meio não divide a contagem).
         conn.execute("BEGIN")
         try:
-            intervalo = semana.intervalo_utc(inicio)
-            atual = consultas.contar_semana(conn, *intervalo)
-            anterior = consultas.contar_semana(conn, *semana.intervalo_utc(inicio_anterior))
+            resultado, intervalo = _ranking_da_semana(conn, inicio, config)
             criticos = consultas.listar_criticos(conn, *intervalo)
             invalidas = consultas.listar_invalidas(conn, *intervalo)
             falhos = consultas.listar_alertas_falhos(conn)  # de qualquer semana: ?semana= não filtra
             acoes = consultas.listar_acoes_pendentes(conn)
         finally:
             conn.execute("COMMIT")  # só leitura: nada a desfazer; libera antes do BEGIN IMMEDIATE do token
-        resultado = ranking.calcular_ranking(atual, anterior if anterior.total > 0 else None, config)
         enviar = resumo.deve_enviar(resultado, criticos, acoes, config, invalidas, falhos)
         curto = resumo.aviso_curto(resultado, criticos, acoes, config, invalidas, falhos)
 
@@ -242,10 +312,8 @@ def exigir_token(token: str, relogio=Depends(obter_relogio)) -> str:
     if not tokens.formato_valido(token):
         raise HTTPException(status_code=404, detail=LINK_INVALIDO)
     try:
-        caminho = os.environ.get("RADAR_DB")
-        if not caminho:
-            raise ErroDeConfiguracao("RADAR_DB não definida")
-        with closing(banco.abrir(caminho)) as conn:
+        # O banco precisa existir: banco.abrir criaria um vazio, e o link responderia 404 em vez do 500.
+        with closing(banco.abrir(_caminho_do_banco_existente())) as conn:
             valido = tokens.validar_token(conn, token, relogio(), escopo="painel")
     except Exception as e:  # noqa: BLE001 - configuração ou banco: 500 genérico, só o tipo no log
         logger.error("falha ao validar o link do painel (%s)", type(e).__name__)
@@ -348,15 +416,18 @@ def criar_app(*, recuperar_na_subida=None) -> FastAPI:
         # O token do painel vai na URL: sem Referer, ele não vaza para links externos.
         resposta = await chamar_proxima(request)
         resposta.headers["Referrer-Policy"] = "no-referrer"
+        if _caminho_do_painel(request):  # 200, 404, 422 e 500 das rotas do painel: nada de cache
+            resposta.headers["Cache-Control"] = "no-store"
         return resposta
 
     @app.exception_handler(Exception)
     async def falha_inesperada(request: Request, erro: Exception):
         # Roda no ServerErrorMiddleware, por fora do middleware acima: o cabeçalho vai aqui também.
         logger.error("falha inesperada (%s)", type(erro).__name__)
-        return JSONResponse(
-            status_code=500, content={"detail": "falha interna"}, headers={"Referrer-Policy": "no-referrer"}
-        )
+        cabecalhos = {"Referrer-Policy": "no-referrer"}
+        if _caminho_do_painel(request):
+            cabecalhos["Cache-Control"] = "no-store"
+        return JSONResponse(status_code=500, content={"detail": "falha interna"}, headers=cabecalhos)
 
     @app.exception_handler(ErroDeConfiguracao)
     async def configuracao_ausente(request: Request, erro: ErroDeConfiguracao):
@@ -384,6 +455,24 @@ def criar_app(*, recuperar_na_subida=None) -> FastAPI:
         # Cria um token novo a cada chamada com algo a enviar: a resposta não pode ficar em cache.
         resposta.headers["Cache-Control"] = "no-store"
         return _resumo_semanal(semana_param, relogio, config)
+
+    # Painel (bloco 4.1): o token do caminho é conferido primeiro (exigir_token, declarado antes das outras
+    # dependências), então link inválido dá o 404 uniforme antes de qualquer validação de ?semana=.
+    @app.get("/api/painel/{token}/cards")
+    def painel_cards(
+        resposta: Response,
+        token: str = Depends(exigir_token),
+        semana_param: Optional[str] = Query(None, alias="semana"),
+        relogio=Depends(obter_relogio),
+        config=Depends(obter_config_ranking),
+    ):
+        resposta.headers["Cache-Control"] = "no-store"
+        return _cards_do_painel(semana_param, relogio, config)
+
+    @app.get("/api/painel/{token}/historico")
+    def painel_historico(resposta: Response, token: str = Depends(exigir_token)):
+        resposta.headers["Cache-Control"] = "no-store"
+        return _historico_do_painel()
 
     @com_chave.post("/alertas/reenviar")
     def reenviar_alertas(notificador=Depends(obter_notificador), relogio=Depends(obter_relogio)):
