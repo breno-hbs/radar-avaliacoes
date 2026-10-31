@@ -57,7 +57,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | `GET /painel/{token}` | Dono (navegador) | Token com validade (tokens\_painel) | Serve a página mobile-first |
 | `GET /api/painel/{token}/cards` | Painel | Token | Cards com problema, evidências e recomendação |
 | `POST /api/painel/{token}/acoes` | Painel | Token | Registra uma ação com `categoria`, `semana_inicio` e de 1 a 3 evidências (só `avaliacao_id` e `posicao`); o servidor confere as evidências e deriva o trecho exibido do texto da avaliação |
-| `PATCH /api/painel/{token}/acoes/{id}` | Painel | Token | Muda o estado da ação |
+| `PATCH /api/painel/{token}/acoes/{id}` | Painel | Token | Muda o estado e/ou a nota da ação |
 | `GET /api/painel/{token}/historico` | Painel | Token | Semanas com ações registradas, da mais recente à mais antiga (inclui a semana mais recente), com as ações, as evidências (trecho exibido e posição) e o texto original das avaliações |
 
 **Regras de segurança:**
@@ -182,6 +182,14 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - Resposta de `/historico`: `semanas` com pelo menos uma ação, da mais recente à mais antiga, no máximo 12. Cada uma traz `semana_inicio` (ISO com fuso America/Sao\_Paulo), `rotulo` e `acoes` [{`id`, `categoria`, `estado`, `criada_em`, `concluida_em`, `nota`, `evidencias` [{`posicao`, `trecho_exibido`, `texto_original`}]}]. `criada_em` e `concluida_em` saem em ISO com fuso America/Sao\_Paulo, como `periodo` e `ultima_leitura` (o banco continua em UTC). O trecho exibido é o gravado em `acao_avaliacoes`, nunca recalculado.
 - As duas rotas só leem o banco, respondem com `Cache-Control: no-store` em todas as respostas (200, 404, 422 e 500) e devolvem os textos de avaliação como dados.
 - A página do painel busca o JSON e renderiza os textos com `textContent`; não embute dados de avaliação em `<script>` inline nem usa `innerHTML`.
+
+**Decisão tomada (31/10/2026), Fase 4:** rotas de ação do painel, `POST /api/painel/{token}/acoes` e `PATCH /api/painel/{token}/acoes/{id}`. Regras:
+
+- Uma ação por (`categoria`, `semana_inicio`). A segunda recebe 409 com {`id`, `estado`} da existente. Um índice único no banco garante isso (`CREATE UNIQUE INDEX IF NOT EXISTS`, criado na abertura do banco); é seguro porque a tabela `acoes` nunca foi gravável antes.
+- Estados: `pendente` → `em_andamento` → `concluida` e `pendente` → `concluida`, sem voltar atrás. Transição inválida responde 409 com o estado atual. Repetir o mesmo estado responde 200 sem mudança. `concluida_em` é gravado uma vez, na primeira conclusão.
+- Nota: texto livre opcional de até 500 caracteres, aceito no POST e no PATCH, editável sempre (inclusive depois de concluída) e devolvido como dado.
+- Códigos do POST: 201; token inválido 404, sempre antes de qualquer validação do corpo; corpo inválido 422; duplicata 409. Códigos do PATCH: 200; id inexistente 404 (`{"detail": "ação não encontrada"}`, depois da checagem do token); id que não é inteiro 422; transição inválida 409.
+- `semana_inicio` no corpo do POST é a data local da segunda-feira (AAAA-MM-DD) e não pode ser posterior à semana atual (422). É gravada como o início da semana em UTC, como já decidido.
 
 **Decisão tomada (31/10/2026), Fase 2:** esquema de `acao_avaliacoes`, integridade e datas, adotados na camada de persistência (`app/banco.py`). Regras:
 
