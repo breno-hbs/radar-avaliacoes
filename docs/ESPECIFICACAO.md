@@ -101,7 +101,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - Falha técnica esgotada (timeout, erro de conexão, 408, 409, 429 ou 5xx depois das 3 chamadas): o endpoint devolve 503 e não grava nada. O simulador reenvia a avaliação depois.
 - Erro permanente da API (400, 401, 403 e outros), que indica problema de configuração: o endpoint devolve 500 e não grava nada. O erro não é repetido.
 - Risco aceito: se a avaliação não for reenviada, ela se perde, inclusive uma avaliação crítica. Isso faz parte da decisão em aberto sobre reprocessamento.
-- Respostas: 201 com `avaliacao_id`, `criada` verdadeiro e `alerta_id` quando a avaliação é gravada; 200 com `avaliacao_id` e `criada` falso quando o `id_externo` já existe (duplicata). Dados inválidos (campo ausente, tipo errado ou `recebida_em` sem fuso) recebem 422, depois de conferida a chave.
+- Respostas: 201 quando a avaliação é gravada, com `avaliacao_id`, `criada` verdadeiro e `alerta_id` (nulo quando a avaliação não gerou alerta). Isso inclui a avaliação gravada como `invalida`, que recebe 201 com `alerta_id` nulo e não deve ser tratada como erro nem reenviada. 200 com `avaliacao_id` e `criada` falso quando o `id_externo` já existe (duplicata). 401 sem chave ou com chave errada, conferida antes de ler o corpo. 422 para corpo que não é JSON ou objeto, campo ausente ou de tipo errado, `id_externo` vazio e `recebida_em` ilegível, sem fuso ou fora do intervalo. 500 genérico, sem detalhe, para erro permanente da API, falha inesperada ou variável de ambiente ausente.
 
 **Decisão tomada (30/10/2026), Fase 2:** cada ação registrada fica ligada às avaliações que serviram de evidência, na tabela `acao_avaliacoes`. O critério: o sistema guarda o que o dono viu quando decidiu. Regras:
 
