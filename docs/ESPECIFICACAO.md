@@ -70,13 +70,13 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 | Tabela | Campos principais |
 | --- | --- |
-| `avaliacoes` | `id`, `id_externo` (único), `texto`, `nota`, `recebida_em`, `prazo_resposta` (= recebida\_em + 5 dias), `categorias`, `criticidade`, `confianca` |
+| `avaliacoes` | `id`, `id_externo` (único), `texto`, `nota`, `recebida_em`, `prazo_resposta` (= recebida\_em + 5 dias), `categorias`, `criticidade`, `status_classificacao` |
 | `alertas` | `id`, `avaliacao_id`, `tipos`, `estado`, `tentativas`, `criado_em`, `enviado_em`; único por `avaliacao_id`. `tipos` é a lista de todas as marcações críticas da avaliação |
 | `acoes` | `id`, `categoria`, `semana_inicio`, `estado`, `criada_em`, `concluida_em`, `nota` |
 | `acao_avaliacoes` | `acao_id` (referência a `acoes`), `avaliacao_id` (referência a `avaliacoes`), `trecho_exibido`, `posicao` (de 1 a 3); chave primária (`acao_id`, `avaliacao_id`) e único por (`acao_id`, `posicao`) |
 | tokens\_painel | id, token\_hash (único, SHA-256), escopo, criado\_em, expira\_em (= criado\_em + 7 dias), revogado\_em |
 
-**Estados:** alerta → `pendente`, `enviado` ou `falhou`. Ação → `pendente`, `em_andamento` ou `concluida`.
+**Estados:** alerta → `pendente`, `enviado` ou `falhou`. Ação → `pendente`, `em_andamento` ou `concluida`. Classificação → `ok` ou `invalida`.
 
 **Ordem do alerta:** o FastAPI grava o alerta como `pendente` **antes** de chamar o Telegram, marca `enviado` ao confirmar e tenta de novo uma vez se falhar; se a nova tentativa também falhar, o estado fica `falhou`. O campo `tentativas` registra as tentativas de envio. A mensagem é única por avaliação e lista todos os tipos identificados, sempre como "relato a verificar". A avaliação e o alerta `pendente` são gravados na mesma transação: se um não for gravado, nenhum dos dois é, e o reenvio da avaliação volta a ser processado. O histórico semanal é calculado das tabelas, sem tabela própria.
 
@@ -85,6 +85,17 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 **Prioridade:** não perder um alerta crítico. Um alerta `falhou` continua registrado no banco, e o caso também aparece no resumo semanal. Como garantir que um alerta `pendente` ou `falhou` seja entregue é a decisão em aberto abaixo.
 
 **Decisão em aberto (Fase 2):** definir a recuperação de alertas `pendente` após o reinício do servidor e o tratamento dos alertas `falhou` (reenvio automático, reenvio manual ou apenas o registro). Registrar o alerta no banco e mostrá-lo no resumo semanal não equivale a garantir aviso imediato ao dono: um alerta `pendente` ou `falhou` pode ficar sem ser entregue até o próximo resumo. Definir também se o resumo semanal mostra o estado do alerta (`pendente`, `enviado` ou `falhou`), já que o contrato de `GET /resumo-semanal` não o inclui.
+
+**Decisão tomada (31/10/2026), Fase 2:** a coluna `confianca` é substituída por `status_classificacao`, com os valores `ok` e `invalida`. O critério: o classificador congelado da v1 devolve só `categorias` e `criticidade`, sem nenhum valor de confiança, e pedir um ao modelo alteraria o prompt e o esquema congelados (seria uma v2, com conjunto novo de avaliação). Regras:
+
+- `invalida` é a saída que não respeita o contrato do classificador (JSON inválido ou valor fora do conjunto), depois da regra de retentativa. Todas as demais são `ok`. Falha técnica (timeout, erro de conexão, 408, 409, 429, 5xx) não é saída inválida.
+- É um estado objetivo da classificação, não uma medida de dúvida nem uma probabilidade.
+- A avaliação `invalida` é gravada com `categorias` e `criticidade` vazias e não gera alerta. Ela é contada na linha de cobertura, em "avaliações que a IA não conseguiu classificar (saída inválida)".
+- Marcar como suspeitas as avaliações com nota baixa e sem categoria fica para uma versão futura, porque a especificação ainda não define nota baixa.
+
+**Decisão em aberto (Fase 2):** definir o reprocessamento das avaliações `invalida` (automático ou manual) e como o dono é avisado. Uma avaliação crítica com saída inválida não gera alerta, o que conflita com a prioridade de não perder um alerta crítico.
+
+**Decisão em aberto (Fase 2):** definir o comportamento do `POST /avaliacoes` diante de falha técnica do classificador: devolver erro para o simulador tentar de novo ou gravar a avaliação como pendente de classificação.
 
 **Decisão tomada (30/10/2026), Fase 2:** cada ação registrada fica ligada às avaliações que serviram de evidência, na tabela `acao_avaliacoes`. O critério: o sistema guarda o que o dono viu quando decidiu. Regras:
 
@@ -107,7 +118,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 - **Pontuação de um problema:** `pontuacao = mencoes × gravidade × fator_tendencia`. A gravidade é um peso fixo por categoria e o fator de tendência multiplica a pontuação quando o problema subiu em relação à semana anterior. Os valores estão na decisão tomada abaixo.
 - **Conteúdo de um card:** o problema em uma linha, a quantidade e o período, até 3 trechos reais como evidência, a recomendação e o botão "registrar ação". O que não entra nos 3 cards fica um toque adiante, em "outros temas".
-- **Linha de cobertura fixa:** total de avaliações lidas, cards, temas monitorados sem ação e avaliações que a IA não soube classificar (baixa confiança). Quando o mínimo de avaliações para comparar a tendência não é atingido em alguma das duas semanas, a linha traz "tendência não calculada: amostra pequena".
+- **Linha de cobertura fixa:** total de avaliações lidas, cards, temas monitorados sem ação e avaliações que a IA não conseguiu classificar (saída inválida). Quando o mínimo de avaliações para comparar a tendência não é atingido em alguma das duas semanas, a linha traz "tendência não calculada: amostra pequena".
 - **Sem presumir causa:** o texto diz "o padrão sugere" e recomenda investigar. Entregador nunca gera ação interna.
 - **Alerta crítico:** sai na hora em que a avaliação entra no endpoint, com o texto "relato a verificar", em uma mensagem por avaliação que lista todos os tipos identificados. Os casos críticos também contam no resumo semanal. O alerta pode ser enviado automaticamente ao dono, sempre como relato a verificar. Respostas públicas aos clientes nunca são enviadas automaticamente.
 - **Resumo semanal:** segunda-feira às 8h, no fuso America/Sao\_Paulo. Só é enviado se houver algo a decidir, exceto em semana de volume pequeno (menos de N = 20 avaliações), quando, mesmo sem cards, sai um aviso curto; um indicador "última leitura" no painel mostra que o sistema está vivo.
@@ -138,7 +149,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - **Desempate:** quando as pontuações são iguais, ordena-se por maior peso de gravidade, depois por mais menções e, por último, pelo identificador da categoria em ordem alfabética. Os mesmos dados produzem sempre a mesma ordem.
 - **Amostra mínima:** o fator de tendência só é calculado se as duas semanas comparadas têm pelo menos N = 20 avaliações. Caso contrário, vale 1,0. Os cards continuam sendo calculados por menções × gravidade, apenas sem o bônus de tendência. Se a semana anterior tem amostra suficiente e taxa 0, um aumento real vale 1,25.
 - **Resumo com volume pequeno:** a semana com menos de N avaliações ainda gera resumo. Se houver cards, o resumo sai normalmente. Se não houver nenhum, sai um aviso curto com o total de avaliações lidas, para que o silêncio não seja confundido com sistema parado. A linha de cobertura traz "tendência não calculada: amostra pequena" quando o mínimo não é atingido em alguma das duas semanas.
-- **`mencoes`:** número de avaliações da semana que têm a categoria; uma avaliação conta uma vez por categoria. A semana é o intervalo de segunda-feira 00:00 (inclusive) até a segunda-feira seguinte 00:00 (exclusive), no fuso America/Sao\_Paulo, pelo campo `recebida_em`. Uma avaliação recebida na segunda-feira, mesmo antes das 8h, pertence à semana que começa nessa segunda; o resumo de segunda às 8h cobre a semana que terminou. O denominador de "por 100 avaliações" é o total de avaliações recebidas na semana, inclusive as positivas, as sem categoria e as de baixa confiança.
+- **`mencoes`:** número de avaliações da semana que têm a categoria; uma avaliação conta uma vez por categoria. A semana é o intervalo de segunda-feira 00:00 (inclusive) até a segunda-feira seguinte 00:00 (exclusive), no fuso America/Sao\_Paulo, pelo campo `recebida_em`. Uma avaliação recebida na segunda-feira, mesmo antes das 8h, pertence à semana que começa nessa segunda; o resumo de segunda às 8h cobre a semana que terminou. O denominador de "por 100 avaliações" é o total de avaliações recebidas na semana, inclusive as positivas, as sem categoria e as de saída inválida.
 - **Avaliações críticas:** contam em `mencoes` das suas categorias operacionais e podem ser evidência de um card, mantendo o rótulo "relato a verificar". O alerta crítico segue o fluxo próprio.
 - **Configuração:** pesos, fator de tendência e N ficam em um arquivo de configuração versionado no código. O ranking exibido não é gravado, então mudar um valor muda o ranking calculado de semanas passadas. Para as ações registradas, o sistema guarda as evidências exibidas (`acao_avaliacoes`), mas não a pontuação, a posição do card nem a versão dos pesos.
 
