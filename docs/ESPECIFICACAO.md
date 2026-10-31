@@ -88,14 +88,14 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Decisão tomada (31/10/2026), Fase 2:** a coluna `confianca` é substituída por `status_classificacao`, com os valores `ok` e `invalida`. O critério: o classificador congelado da v1 devolve só `categorias` e `criticidade`, sem nenhum valor de confiança, e pedir um ao modelo alteraria o prompt e o esquema congelados (seria uma v2, com conjunto novo de avaliação). Regras:
 
-- `invalida` é a saída que não respeita o contrato do classificador (JSON inválido ou valor fora do conjunto), depois da regra de retentativa. Todas as demais são `ok`. Falha técnica (timeout, erro de conexão, 408, 409, 429, 5xx) não é saída inválida.
+- `invalida` é o resultado da regra de retentativa congelada (`REGRA_RETENTATIVA`, em `app/classificador.py`, que é a fonte desta lista) quando a última falha, depois de até 3 chamadas, é de conteúdo da resposta: resposta cortada (`max_tokens`), recusa (`refusal`), resposta sem bloco de texto, texto que não é JSON ou JSON fora do contrato. Todas as demais são `ok`. Falha técnica (timeout, erro de conexão, 408, 409, 429, 5xx) e erro permanente da API (400, 401, 403 e outros) não são `invalida`; ver a decisão em aberto sobre falha técnica.
 - É um estado objetivo da classificação, não uma medida de dúvida nem uma probabilidade.
-- A avaliação `invalida` é gravada com `categorias` e `criticidade` vazias e não gera alerta. Ela é contada na linha de cobertura, em "avaliações que a IA não conseguiu classificar (saída inválida)".
+- A avaliação `invalida` é gravada com `categorias` e `criticidade` vazias e é contada na linha de cobertura, em "avaliações que a IA não conseguiu classificar (saída inválida)".
 - Marcar como suspeitas as avaliações com nota baixa e sem categoria fica para uma versão futura, porque a especificação ainda não define nota baixa.
 
-**Decisão em aberto (Fase 2):** definir o reprocessamento das avaliações `invalida` (automático ou manual) e como o dono é avisado. Uma avaliação crítica com saída inválida não gera alerta, o que conflita com a prioridade de não perder um alerta crítico.
+**Decisão em aberto (Fase 2):** definir o reprocessamento das avaliações `invalida` (automático ou manual) e como o dono é avisado. Enquanto isso não for decidido, uma avaliação crítica com saída inválida fica sem alerta, o que conflita com a prioridade de não perder um alerta crítico. Alternativas a considerar: alerta genérico "classificação falhou, verificar manualmente", reprocessamento imediato ou aviso no resumo semanal.
 
-**Decisão em aberto (Fase 2):** definir o comportamento do `POST /avaliacoes` diante de falha técnica do classificador: devolver erro para o simulador tentar de novo ou gravar a avaliação como pendente de classificação.
+**Decisão em aberto (Fase 2):** definir o comportamento do `POST /avaliacoes` diante de falha técnica ou erro permanente da API do classificador: devolver erro para o simulador tentar de novo ou gravar a avaliação como pendente de classificação.
 
 **Decisão tomada (30/10/2026), Fase 2:** cada ação registrada fica ligada às avaliações que serviram de evidência, na tabela `acao_avaliacoes`. O critério: o sistema guarda o que o dono viu quando decidiu. Regras:
 
