@@ -377,6 +377,39 @@ def test_patch_nota_de_500_aceita(cliente, token, acao):
     assert _patch(cliente, token, acao["id"], {"nota": "y" * 500}).status_code == 200
 
 
+# ---------- nota vazia vira null; nota com texto não é alterada ----------
+
+@pytest.mark.parametrize("vazia", ["", "   ", "\t \n"])
+def test_post_com_nota_vazia_ou_so_espacos_grava_null(cliente, ambiente, token, avs, vazia):
+    r = _post(cliente, token, _corpo(avs, nota=vazia))
+    assert r.status_code == 201 and r.json()["nota"] is None
+    assert _linhas(ambiente, "acoes")[0]["nota"] is None
+
+
+@pytest.mark.parametrize("vazia", ["", "   ", "\t \n"])
+def test_patch_com_so_nota_vazia_grava_null_e_nao_e_corpo_vazio(cliente, ambiente, token, avs, vazia):
+    acao = _post(cliente, token, _corpo(avs, nota="antiga")).json()
+    r = _patch(cliente, token, acao["id"], {"nota": vazia})
+    assert r.status_code == 200 and r.json()["nota"] is None
+    assert _linhas(ambiente, "acoes")[0]["nota"] is None
+
+
+def test_patch_nota_com_texto_nao_sofre_strip(cliente, ambiente, token, acao):
+    r = _patch(cliente, token, acao["id"], {"nota": "  oi  "})
+    assert r.json()["nota"] == "  oi  "
+    assert _linhas(ambiente, "acoes")[0]["nota"] == "  oi  "
+
+
+def test_post_nota_com_texto_nao_sofre_strip(cliente, token, avs):
+    assert _post(cliente, token, _corpo(avs, nota="  oi  ")).json()["nota"] == "  oi  "
+
+
+def test_patch_null_continua_apagando_e_limite_vale_para_o_que_chega(cliente, token, avs):
+    acao = _post(cliente, token, _corpo(avs, nota="x")).json()
+    assert _patch(cliente, token, acao["id"], {"nota": None}).json()["nota"] is None
+    assert _patch(cliente, token, acao["id"], {"nota": " " * 501}).status_code == 422
+
+
 def test_id_inexistente_404_e_id_nao_inteiro_422(cliente, token, acao):
     for acao_id in ("999999", "-1", "0"):
         r = _patch(cliente, token, acao_id, {"estado": "concluida"})
