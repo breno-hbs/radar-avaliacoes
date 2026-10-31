@@ -59,6 +59,10 @@ CREATE TABLE IF NOT EXISTS acoes (
     nota TEXT
 );
 
+-- Bloco 4.2: uma ação por (categoria, semana_inicio). Criado também em banco antigo, ao abrir; é seguro
+-- porque a tabela acoes nunca foi gravável antes deste bloco.
+CREATE UNIQUE INDEX IF NOT EXISTS acoes_uma_por_categoria_e_semana ON acoes (categoria, semana_inicio);
+
 CREATE TABLE IF NOT EXISTS acao_avaliacoes (
     acao_id INTEGER NOT NULL REFERENCES acoes (id) ON DELETE RESTRICT,
     avaliacao_id INTEGER NOT NULL REFERENCES avaliacoes (id) ON DELETE RESTRICT,
@@ -341,3 +345,111 @@ def registrar_token_painel(conn, token_hash: str, escopo: str, criado_em: str) -
             (token_hash, escopo, criado.isoformat(), expira.isoformat()),
         )
     return cur.lastrowid
+
+
+# ---------- ações do painel (bloco 4.2) ----------
+
+ESTADOS_ACAO = ("pendente", "em_andamento", "concluida")
+# Sem voltar atrás. Repetir o mesmo estado não é transição: responde sem mudança.
+TRANSICOES_ACAO = {"pendente": {"em_andamento", "concluida"}, "em_andamento": {"concluida"}, "concluida": set()}
+_SEM_MUDANCA = object()
+
+
+class AcaoDuplicada(Exception):
+    """Já existe uma ação para a categoria e a semana."""
+
+    def __init__(self, acao_id, estado):
+        super().__init__("ação duplicada")
+        self.acao_id, self.estado = acao_id, estado
+
+
+class AcaoInexistente(LookupError):
+    """O id não corresponde a nenhuma ação (exceção própria, para um KeyError de bug não virar 404)."""
+
+
+class TransicaoInvalida(Exception):
+    def __init__(self, estado):
+        super().__init__("transição inválida")
+        self.estado = estado
+
+
+def _acao_existente(conn, categoria, semana_inicio):
+    return conn.execute(
+        "SELECT id, estado FROM acoes WHERE categoria = ? AND semana_inicio = ?", (categoria, semana_inicio)
+    ).fetchone()
+
+
+def registrar_acao(conn, *, categoria: str, semana_inicio: str, criada_em: str, nota, evidencias) -> int:
+    """Grava a ação e as evidências numa única transação; um erro no meio desfaz tudo.
+
+    `evidencias` é uma lista de (avaliacao_id, posicao, trecho_exibido), já conferida e com o trecho derivado
+    pelo servidor. Duplicata de (categoria, semana_inicio) levanta AcaoDuplicada com a existente: a consulta
+    roda sob o mesmo BEGIN IMMEDIATE do INSERT, e o índice único é a garantia final contra corrida.
+    """
+    _exigir_texto(categoria, "categoria")
+    inicio = _utc(semana_inicio, "semana_inicio").isoformat()
+    criada = _utc(criada_em, "criada_em").isoformat()
+    with _transacao(conn):
+        existente = _acao_existente(conn, categoria, inicio)
+        if existente is not None:
+            raise AcaoDuplicada(existente[0], existente[1])
+        try:
+            cur = conn.execute(
+                "INSERT INTO acoes (categoria, semana_inicio, estado, criada_em, nota) VALUES (?, ?, 'pendente', ?, ?)",
+                (categoria, inicio, criada, nota),
+            )
+        except sqlite3.IntegrityError:
+            existente = _acao_existente(conn, categoria, inicio)
+            if existente is None:
+                raise
+            raise AcaoDuplicada(existente[0], existente[1]) from None
+        acao_id = cur.lastrowid
+        for avaliacao_id, posicao, trecho_exibido in evidencias:
+            conn.execute(
+                "INSERT INTO acao_avaliacoes (acao_id, avaliacao_id, trecho_exibido, posicao) VALUES (?, ?, ?, ?)",
+                (acao_id, avaliacao_id, trecho_exibido, posicao),
+            )
+    return acao_id
+
+
+def buscar_acao(conn, acao_id: int):
+    """A ação com as evidências gravadas (posicao, avaliacao_id, trecho_exibido), ou None."""
+    linha = conn.execute("SELECT * FROM acoes WHERE id = ?", (acao_id,)).fetchone()
+    if linha is None:
+        return None
+    acao = dict(linha)
+    acao["evidencias"] = [
+        {"posicao": p, "avaliacao_id": a, "trecho_exibido": t}
+        for p, a, t in conn.execute(
+            "SELECT posicao, avaliacao_id, trecho_exibido FROM acao_avaliacoes WHERE acao_id = ? ORDER BY posicao",
+            (acao_id,),
+        )
+    ]
+    return acao
+
+
+def mudar_acao(conn, acao_id: int, *, agora: str, estado=_SEM_MUDANCA, nota=_SEM_MUDANCA) -> None:
+    """Muda o estado e/ou a nota, sob BEGIN IMMEDIATE (ler e gravar sem corrida).
+
+    Inexistente levanta AcaoInexistente. Transição para trás levanta TransicaoInvalida com o estado atual, e nada
+    muda (nem a nota enviada junto). Repetir o mesmo estado não muda nada. concluida_em é gravado uma vez, na
+    primeira conclusão.
+    """
+    instante = _utc(agora, "agora").isoformat()
+    with _transacao(conn):
+        linha = conn.execute("SELECT estado FROM acoes WHERE id = ?", (acao_id,)).fetchone()
+        if linha is None:
+            raise AcaoInexistente(f"ação inexistente: {acao_id}")
+        atual = linha[0]
+        if estado is not _SEM_MUDANCA and estado != atual:
+            if estado not in ESTADOS_ACAO:
+                raise ValueError(f"estado de ação inválido: {estado!r}")
+            if estado not in TRANSICOES_ACAO[atual]:
+                raise TransicaoInvalida(atual)
+            conn.execute(
+                "UPDATE acoes SET estado = ?, concluida_em = CASE WHEN ? = 'concluida' "
+                "THEN COALESCE(concluida_em, ?) ELSE concluida_em END WHERE id = ?",
+                (estado, estado, instante, acao_id),
+            )
+        if nota is not _SEM_MUDANCA:
+            conn.execute("UPDATE acoes SET nota = ? WHERE id = ?", (nota, acao_id))

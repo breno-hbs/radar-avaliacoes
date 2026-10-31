@@ -281,12 +281,15 @@ def test_referrer_policy_em_200_404_e_401(cenario):
     )} == {200, 401}
 
 
-def test_rotas_de_painel_sao_so_as_de_leitura_do_bloco_4_1():
-    # Até o bloco 4.1 não havia rota de painel. Agora só as duas de leitura existem; POST/PATCH de ações e a
-    # página HTML (GET /painel/{token}) ficam para os blocos seguintes.
+def test_rotas_de_painel_sao_as_de_leitura_e_as_de_acao():
+    # Bloco 4.1: as duas rotas de leitura. Bloco 4.2: POST e PATCH de ações. A página HTML
+    # (GET /painel/{token}) fica para o bloco seguinte.
     rotas = {(getattr(r, "path", ""), m) for r in main.criar_app().routes for m in getattr(r, "methods", ())}
     do_painel = {(p, m) for p, m in rotas if "painel" in p}
-    assert do_painel == {("/api/painel/{token}/cards", "GET"), ("/api/painel/{token}/historico", "GET")}
+    assert do_painel == {
+        ("/api/painel/{token}/cards", "GET"), ("/api/painel/{token}/historico", "GET"),
+        ("/api/painel/{token}/acoes", "POST"), ("/api/painel/{token}/acoes/{acao_id}", "PATCH"),
+    }
 
 
 # ---------- segredo nos logs ----------

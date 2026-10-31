@@ -51,10 +51,11 @@ def _conta(conn, tabela):
     return conn.execute(f"SELECT COUNT(*) FROM {tabela}").fetchone()[0]
 
 
-def _acao(conn):
+def _acao(conn, categoria="atraso"):
     cur = conn.execute(
         "INSERT INTO acoes (categoria, semana_inicio, estado, criada_em) "
-        "VALUES ('atraso', '2026-10-26', 'pendente', '2026-10-27T11:00:00+00:00')"
+        "VALUES (?, '2026-10-26', 'pendente', '2026-10-27T11:00:00+00:00')",
+        (categoria,),
     )
     return cur.lastrowid
 
@@ -325,8 +326,9 @@ def test_posicao_repetida_na_mesma_acao_e_recusada(conn):
 
 def test_mesma_avaliacao_pode_ser_evidencia_de_varias_acoes(conn):
     av = _grava(conn).avaliacao_id
+    # bloco 4.2: uma ação por (categoria, semana); as duas ações aqui são de categorias diferentes
     _evidencia(conn, _acao(conn), av, 1)
-    _evidencia(conn, _acao(conn), av, 1)
+    _evidencia(conn, _acao(conn, "embalagem"), av, 1)
     assert _conta(conn, "acao_avaliacoes") == 2
 
 
