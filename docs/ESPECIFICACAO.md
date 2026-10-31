@@ -197,6 +197,16 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - O validador da configuração recusa um `fator_tendencia` que viole "peso vence tendência": para cada par de pesos distintos consecutivos, `fator × menor_peso` deve ser menor que `maior_peso`. Com pesos 2 e 3, 1,5 é recusado e 1,49 é aceito; com 1,25 continua valendo.
 - O resultado do ranking traz `motivo_sem_tendencia`: `null` quando a tendência foi calculada; `sem_semana_anterior` quando não há semana anterior, com o texto de cobertura "tendência não calculada: sem semana anterior"; `amostra_pequena` quando a semana anterior existe, mas uma das duas semanas tem menos de N avaliações, com o texto "tendência não calculada: amostra pequena". O endpoint passa `anterior=None` quando a semana anterior tem 0 avaliações.
 
+**Decisão tomada (31/10/2026), Fase 2:** `GET /resumo-semanal` (`app/resumo.py`). Regras:
+
+- Parâmetro opcional `?semana=AAAA-MM-DD`, que precisa ser uma segunda-feira (data local de America/Sao\_Paulo); fora disso, 422. Sem ele, vale a última semana completa. A chave é conferida antes do parâmetro.
+- A resposta traz `periodo`, `total`, `negativas`, `invalidas`, até 3 `cards` (categoria, menções, taxa por 100 com 1 casa, tendência em alta, problema e recomendação da tabela de categorias; sem pontuação), `outros_temas`, `temas_sem_acao`, `criticos`, `acoes_pendentes`, `cobertura`, `enviar`, `mensagem` (texto simples, com "o padrão sugere") e `link_painel`.
+- "Algo a decidir" significa pelo menos um card, um crítico ou uma ação pendente. `enviar` é verdadeiro nesses casos e também em semana com menos de N avaliações (inclusive 0), quando sai o aviso curto com o total lido.
+- Cada crítico mostra o estado do alerta (`pendente`, `enviado`, `falhou` ou nulo, se não houver alerta). A recuperação de alertas `pendente` e `falhou` continua em aberto.
+- Ação pendente é a de estado `pendente` ou `em_andamento`, de qualquer semana.
+- O link do painel é `RADAR_URL_BASE/painel/<token>`. `RADAR_URL_BASE` vem do ambiente (http ou https, sem barra final); ausente ou inválida, a rota responde 500 e não cria token.
+- Efeito colateral: o GET cria um token novo em `tokens_painel` a cada chamada com `enviar` verdadeiro, e nenhum quando é falso. É a única escrita da rota, e a resposta vai com `Cache-Control: no-store`.
+
 ## Avaliação, critérios de aceitação e cronograma
 
 **A v1 só está pronta quando a classificação é medida e os oito critérios abaixo são comprovados.**

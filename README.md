@@ -78,6 +78,16 @@ saiu certa e as categorias diferiram do gabarito, igual nas 3 rodadas:
 - Mudar o prompt depois deste resultado cria uma v2, com métricas exploratórias; o resultado da v1
   continua publicado.
 
+## Como rodar o servidor
+
+As variáveis ficam no `.env`, que não vai para o Git: `RADAR_API_KEY`, `RADAR_DB`, `RADAR_URL_BASE` (endereço público do app, http ou https, sem barra final, base do link do painel), `ANTHROPIC_API_KEY`, `RADAR_TELEGRAM_TOKEN` e `RADAR_TELEGRAM_CHAT_ID`. O uvicorn carrega o arquivo com `--env-file`:
+
+```
+uvicorn app.main:app --env-file .env
+```
+
+`GET /resumo-semanal` (com `X-API-Key`) devolve o resumo da última semana completa, ou da semana de `?semana=AAAA-MM-DD`. Cada chamada com algo a enviar cria um link novo do painel.
+
 ## Limitações
 
 - As 85 avaliações são fictícias, criadas com apoio de IA; nenhuma foi escrita à mão. As classificações foram revisadas manualmente por uma única pessoa (rotulador único).
