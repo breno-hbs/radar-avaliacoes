@@ -284,3 +284,34 @@ def test_critico_sem_alerta_na_mensagem_nao_diz_alerta_sem_alerta(cliente, ambie
         conn.execute("DELETE FROM alertas WHERE id = ?", (r.alerta_id,))
     linha = next(l for l in _get(cliente).json()["mensagem"].splitlines() if l.startswith("- c-sem"))
     assert linha.endswith("relato a verificar, sem alerta registrado")
+
+
+# ---------- cobertura no aviso curto ----------
+
+def test_aviso_curto_traz_a_linha_de_cobertura_depois_do_total_lido(cliente, ambiente):
+    _varias(ambiente, 5)
+    _varias(ambiente, 3, quando=SEGUNDA - timedelta(days=3))  # semana anterior existe, mas é pequena
+    corpo = _get(cliente).json()
+    linhas = corpo["mensagem"].splitlines()
+    assert corpo["link_painel"] is None and _linhas(ambiente, "tokens_painel") == []
+    assert linhas[0] == "(dados simulados)"
+    i = linhas.index("Semana com volume pequeno: 5 avaliações lidas.")
+    assert linhas[i + 1] == corpo["cobertura"]["texto"]  # logo depois do total lido
+    assert "tendência não calculada: amostra pequena" in linhas[i + 1]
+    assert len(linhas) == i + 2  # nada depois: sem link
+
+
+def test_aviso_curto_sem_semana_anterior_traz_o_texto_de_sem_semana_anterior(cliente, ambiente):
+    _varias(ambiente, 5)
+    linhas = _get(cliente).json()["mensagem"].splitlines()
+    assert "tendência não calculada: sem semana anterior" in linhas[-1]
+
+
+def test_demais_formatos_nao_mudam(cliente, ambiente):
+    _varias(ambiente, 20)
+    _grava(ambiente, SEGUNDA + timedelta(days=1), categorias=["atraso"])
+    corpo = _get(cliente).json()
+    linhas = corpo["mensagem"].splitlines()
+    assert sum(l == corpo["cobertura"]["texto"] for l in linhas) == 1  # uma vez só
+    assert linhas[-1] == f"Painel: {corpo['link_painel']}"
+    assert "Semana com volume pequeno" not in corpo["mensagem"]

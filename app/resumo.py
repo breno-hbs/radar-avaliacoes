@@ -168,8 +168,9 @@ def montar(inicio: datetime, resultado, criticos, acoes_pendentes, *, amostra_mi
     cobertura = _cobertura(resultado)
 
     linhas = ["(dados simulados)", f"Resumo semanal do Radar: {per['rotulo']}"]
-    if curto:  # aviso curto: só o total lido, sem seções nem link
+    if curto:  # aviso curto: o total lido e a linha de cobertura, sem seções nem link
         linhas.append(f"Semana com volume pequeno: {resultado.total} avaliações lidas.")
+        linhas.append(cobertura["texto"])
     elif cards:
         linhas.append("O padrão sugere investigar estes problemas:")
         for i, (card, original) in enumerate(zip(cards, resultado.cards), start=1):
