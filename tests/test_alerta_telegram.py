@@ -334,8 +334,9 @@ def test_mensagem_lista_todos_os_tipos_como_relato_a_verificar(cliente):
     tg = TelegramFalso()
     r = _post(cliente(tg, classificar=ClassificadorFalso(criticidade=("saude", "alergia", "cobranca_indevida"))))
     mensagem = tg.mensagens[0]
-    primeira, *resto = mensagem.split("\n")
+    prefixo, primeira, *resto = mensagem.split("\n")
 
+    assert prefixo == "(dados simulados)"  # decisão de 31/10/2026 sobre a mensagem do alerta
     assert "🔴" in primeira
     assert "Alerta crítico" in primeira
     for tipo in ("saude", "alergia", "cobranca_indevida"):

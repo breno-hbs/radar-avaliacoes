@@ -43,7 +43,9 @@ CREATE TABLE IF NOT EXISTS alertas (
     estado TEXT NOT NULL DEFAULT 'pendente' CHECK (estado IN ('pendente', 'enviado', 'falhou')),
     tentativas INTEGER NOT NULL DEFAULT 0,
     criado_em TEXT NOT NULL,
-    enviado_em TEXT
+    enviado_em TEXT,
+    tardio INTEGER NOT NULL DEFAULT 0 CHECK (tardio IN (0, 1)),
+    reconhecido_em TEXT
 );
 
 CREATE TABLE IF NOT EXISTS acoes (
@@ -94,7 +96,35 @@ def abrir(caminho) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(_ESQUEMA)
+    _migrar(conn)
     return conn
+
+
+# Colunas acrescentadas depois da primeira versão do esquema (bloco 2.8: recuperação de alertas).
+# Um banco antigo as recebe ao ser aberto; o esquema novo já nasce com elas.
+_COLUNAS_NOVAS_ALERTAS = (
+    ("tardio", "INTEGER NOT NULL DEFAULT 0 CHECK (tardio IN (0, 1))"),
+    ("reconhecido_em", "TEXT"),
+)
+
+
+def _colunas_alertas(conn) -> set:
+    return {linha[1] for linha in conn.execute("PRAGMA table_info(alertas)")}
+
+
+def _migrar(conn) -> None:
+    """ALTER TABLE ADD COLUMN para o que faltar, numa transação. Idempotente e sem perder dados.
+
+    A conferência fora da transação evita um BEGIN IMMEDIATE a cada abertura; a de dentro cobre
+    duas conexões migrando ao mesmo tempo.
+    """
+    if all(nome in _colunas_alertas(conn) for nome, _ in _COLUNAS_NOVAS_ALERTAS):
+        return
+    with _transacao(conn):
+        existentes = _colunas_alertas(conn)
+        for nome, definicao in _COLUNAS_NOVAS_ALERTAS:
+            if nome not in existentes:
+                conn.execute(f"ALTER TABLE alertas ADD COLUMN {nome} {definicao}")
 
 
 @contextmanager
