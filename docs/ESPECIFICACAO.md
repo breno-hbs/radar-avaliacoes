@@ -22,7 +22,7 @@ Oct 28, 2026 · @Breno
 
 &#91;embedded content: arquitetura da v1 · 5 componentes, 4 conexões e 1 alerta direto\]
 
-O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o entrega pelo Telegram. O alerta crítico sai direto do FastAPI, em vermelho. O dono abre o painel pelo link da mensagem, e o painel só conversa com o FastAPI.
+O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o entrega pelo Telegram. O alerta crítico sai direto do FastAPI, em vermelho. Um segundo workflow do n8n, de hora em hora, chama `POST /alertas/reenviar` para reenviar os alertas que não saíram. O dono abre o painel pelo link da mensagem do resumo semanal, e o painel só conversa com o FastAPI.
 
 ## Categorias e criticidade
 
@@ -52,10 +52,11 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | Rota | Quem chama | Autenticação | O que faz |
 | --- | --- | --- | --- |
 | `POST /avaliacoes` | Simulador | Cabeçalho `X-API-Key` | Recebe `id_externo`, `texto`, `nota`, `recebida_em` (com fuso). Valida, ignora duplicata, classifica e, se houver marcação crítica, cria um único alerta com todos os tipos identificados |
-| `GET /resumo-semanal` | n8n | `X-API-Key` | Devolve período, total, negativas, 3 principais problemas, críticos (com o estado do alerta de cada um), ações pendentes e o link do painel |
+| `GET /resumo-semanal` | n8n | `X-API-Key` | Devolve período, total, negativas, 3 principais problemas, críticos (com o estado do alerta de cada um), as avaliações `invalida` da semana a verificar manualmente, os alertas `falhou` ainda não reconhecidos, de qualquer semana, ações pendentes e o link do painel |
+| `POST /alertas/reenviar` | n8n | Cabeçalho `X-API-Key` | Tenta uma vez cada alerta `pendente` ou `falhou` elegível (menos de 5 tentativas e criado há mais de 5 minutos) e devolve 200 com `elegiveis`, `enviados`, `falharam` e `configurado` |
 | `GET /painel/{token}` | Dono (navegador) | Token com validade (tokens\_painel) | Serve a página mobile-first |
 | `GET /api/painel/{token}/cards` | Painel | Token | Cards com problema, evidências e recomendação |
-| `POST /api/painel/{token}/acoes` | Painel | Token | Registra uma ação e as evidências exibidas no card |
+| `POST /api/painel/{token}/acoes` | Painel | Token | Registra uma ação com `categoria`, `semana_inicio` e de 1 a 3 evidências (só `avaliacao_id` e `posicao`); o servidor confere as evidências e deriva o trecho exibido do texto da avaliação |
 | `PATCH /api/painel/{token}/acoes/{id}` | Painel | Token | Muda o estado da ação |
 | `GET /api/painel/{token}/historico` | Painel | Token | Semanas anteriores, com as ações registradas, suas evidências (trecho exibido e posição) e o texto original das avaliações |
 
@@ -78,26 +79,44 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | Tabela | Campos principais |
 | --- | --- |
 | `avaliacoes` | `id`, `id_externo` (único), `texto`, `nota`, `recebida_em`, `prazo_resposta` (= recebida\_em + 5 dias), `categorias`, `criticidade`, `status_classificacao` |
-| `alertas` | `id`, `avaliacao_id`, `tipos`, `estado`, `tentativas`, `criado_em`, `enviado_em`; único por `avaliacao_id`. `tipos` é a lista de todas as marcações críticas da avaliação |
+| `alertas` | `id`, `avaliacao_id`, `tipos`, `estado`, `tentativas`, `criado_em`, `enviado_em`, `tardio` (inteiro 0 ou 1, padrão 0), `reconhecido_em` (instante UTC, nulo por padrão); único por `avaliacao_id`. `tipos` é a lista de todas as marcações críticas da avaliação |
 | `acoes` | `id`, `categoria`, `semana_inicio`, `estado`, `criada_em`, `concluida_em`, `nota` |
 | `acao_avaliacoes` | `acao_id` (referência a `acoes`), `avaliacao_id` (referência a `avaliacoes`), `trecho_exibido`, `posicao` (de 1 a 3); chave primária (`acao_id`, `avaliacao_id`) e único por (`acao_id`, `posicao`) |
 | tokens\_painel | id, token\_hash (único, SHA-256), escopo, criado\_em, expira\_em (= criado\_em + 7 dias), revogado\_em |
 
-**Estados:** alerta → `pendente`, `enviado` ou `falhou`. Ação → `pendente`, `em_andamento` ou `concluida`. Classificação → `ok` ou `invalida`.
+**Estados:** alerta → `pendente`, `enviado` ou `falhou`. O alerta é `pendente` quando foi criado e ainda não foi tentado, ou quando o envio inicial está em andamento (incluída a nova tentativa dele); é `falhou` quando teve pelo menos uma tentativa e ela falhou. O Telegram não configurado não é tentativa. Ação → `pendente`, `em_andamento` ou `concluida`. Classificação → `ok` ou `invalida`.
 
-**Ordem do alerta:** o FastAPI grava o alerta como `pendente` **antes** de chamar o Telegram, marca `enviado` ao confirmar e tenta de novo uma vez se falhar; se a nova tentativa também falhar, o estado fica `falhou`. O campo `tentativas` registra as tentativas de envio. A mensagem é única por avaliação e lista todos os tipos identificados, sempre como "relato a verificar". A avaliação e o alerta `pendente` são gravados na mesma transação: se um não for gravado, nenhum dos dois é, e o reenvio da avaliação volta a ser processado. O histórico semanal é calculado das tabelas, sem tabela própria.
+**Ordem do alerta:** o FastAPI grava o alerta como `pendente` **antes** de chamar o Telegram, marca `enviado` ao confirmar e tenta de novo uma vez se falhar (entre as duas tentativas o alerta continua `pendente`); se a nova tentativa também falhar, o estado fica `falhou` (a recuperação posterior está na decisão tomada abaixo). O campo `tentativas` registra as tentativas de envio. A mensagem é única por avaliação e lista todos os tipos identificados, sempre como "relato a verificar". A avaliação e o alerta `pendente` são gravados na mesma transação: se um não for gravado, nenhum dos dois é, e o reenvio da avaliação volta a ser processado. O histórico semanal é calculado das tabelas, sem tabela própria.
 
 **Limite da unicidade:** a restrição única do banco impede um segundo registro de alerta para a mesma avaliação, mas não garante que o Telegram receba uma só mensagem. Se a mensagem for entregue e a confirmação do Telegram se perder (por exemplo, por tempo esgotado), a nova tentativa a envia de novo. Essa entrega duplicada pode ocorrer excepcionalmente. A v1 não garante entrega exatamente uma vez.
 
 **Decisão tomada (31/10/2026):** envio do alerta crítico ao Telegram. Regras:
 
 - O `POST /avaliacoes` grava a avaliação e o alerta `pendente`, responde normalmente e envia a mensagem em tarefa de fundo. A resposta e o código HTTP não dependem do Telegram.
-- O `criado_em` do alerta é o instante em que a requisição entrou no endpoint, em UTC. O tempo do critério 5 é `enviado_em − criado_em`, lido da tabela `alertas`, sem coluna nova.
+- O `criado_em` do alerta do envio inicial é o instante em que a requisição entrou no endpoint, em UTC (o do alerta criado pelo reprocessamento está na decisão sobre o reprocessamento). O tempo do critério 5 é `enviado_em − criado_em` dos alertas enviados com `tardio` = 0 (o envio inicial), lido da tabela `alertas`; os alertas tardios ficam fora, conforme a decisão sobre a recuperação de alertas.
 - Se o token ou o chat do Telegram não estiver configurado, nada é enviado: o alerta fica `pendente`, com `tentativas` igual a 0, e um aviso é registrado no log.
 
-**Prioridade:** não perder um alerta crítico. Um alerta `falhou` continua registrado no banco, e o caso também aparece no resumo semanal. Como garantir que um alerta `pendente` ou `falhou` seja entregue é a decisão em aberto abaixo.
+**Decisão tomada (31/10/2026), Fase 2:** mensagem do alerta crítico. O critério: um token por alerta multiplicaria as credenciais válidas por 7 dias no histórico do Telegram, e o alerta já traz o relato. Regras:
 
-**Decisão em aberto (Fase 2):** definir a recuperação de alertas `pendente` após o reinício do servidor e o tratamento dos alertas `falhou` (reenvio automático, reenvio manual ou apenas o registro). Registrar o alerta no banco e mostrá-lo no resumo semanal não equivale a garantir aviso imediato ao dono: um alerta `pendente` ou `falhou` pode ficar sem ser entregue até o próximo resumo. O resumo semanal mostra o estado do alerta (decisão de 31/10/2026, GET /resumo-semanal); a recuperação de alertas pendente e falhou continua em aberto.
+- A mensagem tem estes elementos, nesta ordem: o prefixo "(dados simulados)" (como o resumo semanal); a linha "🔴 Alerta crítico: relato a verificar"; o id da avaliação; os tipos identificados; o texto da avaliação, truncado em 300 caracteres; e, só nos reenvios (pela rota ou na subida do servidor; o envio do script de reprocessamento não é reenvio e não leva essa linha), uma linha com o instante de criação do alerta em dd/mm HH:MM, no fuso America/Sao\_Paulo.
+- O alerta não leva o link do painel: o link só vai no resumo semanal.
+- A especificação é a fonte da verdade do formato: o código (`montar_mensagem`, em `app/alertas.py`) e os testes a seguem.
+
+**Prioridade:** não perder um alerta crítico. Um alerta `falhou` continua registrado no banco, e o caso também aparece no resumo semanal até ser reconhecido. Como garantir que um alerta `pendente` ou `falhou` seja entregue está na decisão tomada sobre a recuperação de alertas, abaixo.
+
+**Decisão tomada (31/10/2026), Fase 2:** recuperação de alertas `pendente` e `falhou`. O critério: não perder um alerta crítico sem gerar spam. Regras:
+
+- Elegibilidade: antes de cada varredura (na subida do servidor e na rota `POST /alertas/reenviar`), todo alerta `pendente` com `tentativas` igual ou maior que 5 passa para `falhou`, sem envio e sem marcar `tardio`. Depois disso, só são enviados alertas `pendente` ou `falhou` com `tentativas` menor que 5 (teto `MAX_TENTATIVAS_TOTAL` = 5, contando as tentativas do envio inicial).
+- Ao subir o servidor, o app reenvia, em tarefa de fundo, os alertas `pendente`, pela mesma regra, com o mesmo teto e a mesma janela de 5 minutos do reenvio. É intencional que a subida do servidor reenvie só os `pendente` (ela recupera envios interrompidos), enquanto a rota também reenvia os `falhou`.
+- Nova rota `POST /alertas/reenviar` (chamada pelo n8n, com `X-API-Key`): tenta uma vez cada alerta elegível. Incrementa `tentativas` antes de cada envio, marca `enviado` e `enviado_em` no sucesso e deixa o alerta `falhou` na falha (em qualquer caminho, uma tentativa que falha deixa o alerta `falhou`; a exceção é a primeira falha do envio inicial, que mantém o alerta `pendente` até a nova tentativa). Responde 200 com `{elegiveis, enviados, falharam, configurado}`. Com o Telegram não configurado, nada muda, inclusive `tardio` (não é tentativa: o alerta continua `pendente`, sem incrementar `tentativas`): `configurado` é falso, os demais valores são zero e a rota só registra o aviso.
+- Se a 5ª tentativa falhar, o alerta fica `falhou`, deixa de ser elegível ao reenvio e continua listado no resumo semanal enquanto não for reconhecido.
+- O reenvio só considera alertas com `criado_em` há mais de 5 minutos, para não disputar com o envio inicial em andamento. A janela vale para as varreduras (subida do servidor e rota); o envio que o próprio script de reprocessamento faz logo depois de gravar o alerta não a respeita.
+- O n8n chama a rota de hora em hora, em um segundo workflow pequeno (Fase 3). A aceitação desse workflow é ele ser executado uma vez, manualmente, e devolver 200 com `configurado` verdadeiro; ele não faz parte do critério 6.
+- A mensagem de um reenvio traz uma linha com o instante de criação do alerta.
+- Alerta tardio: a coluna `tardio` (inteiro 0 ou 1, padrão 0) da tabela `alertas` vale 1 desde o instante em que um reenvio ou o reprocessamento começa a agir sobre o alerta, mesmo que a tentativa falhe. O envio inicial nunca a altera, e os alertas criados pelo reprocessamento já nascem com `tardio` = 1. O critério 5 e `scripts/medir_alertas.py` medem só os alertas `enviado` com `tardio` = 0. Um banco criado antes da coluna a recebe ao ser aberto, na mesma migração da coluna `reconhecido_em` (migração simples, sem perder dados). A implementação e a atualização do script ficam para a implementação seguinte.
+- Reconhecimento: a coluna `reconhecido_em` (instante UTC, nulo por padrão) da tabela `alertas` registra que o dono verificou o relato por fora. Ela não muda o estado: o alerta continua `falhou`. `scripts/reconhecer_alerta.py --id N` (ou `--id-externo`) grava `reconhecido_em` com o instante atual, é idempotente (não sobrescreve o primeiro instante) e só roda localmente. Um botão no painel fica como candidato da Fase 4.
+- Vale o limite da unicidade acima: um reenvio pode duplicar uma mensagem que foi entregue sem confirmação. Execuções simultâneas (n8n, subida do servidor e chamada manual) também podem duplicar uma mensagem; a janela de 5 minutos atenua o risco, e ele é aceito.
+- Limitação registrada: com o Telegram fora por cerca de 3 horas ou mais (2 tentativas do envio inicial mais 3 reenvios horários), o alerta chega a 5 tentativas, fica `falhou` e aparece no resumo semanal. É o risco aceito do teto contra spam.
 
 **Decisão tomada (31/10/2026), Fase 2:** a coluna `confianca` é substituída por `status_classificacao`, com os valores `ok` e `invalida`. O critério: o classificador congelado da v1 devolve só `categorias` e `criticidade`, sem nenhum valor de confiança, e pedir um ao modelo alteraria o prompt e o esquema congelados (seria uma v2, com conjunto novo de avaliação). Regras:
 
@@ -106,14 +125,19 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - A avaliação `invalida` é gravada com `categorias` e `criticidade` vazias e é contada na linha de cobertura, em "avaliações que a IA não conseguiu classificar (saída inválida)".
 - Marcar como suspeitas as avaliações com nota baixa e sem categoria fica para uma versão futura, porque a especificação ainda não define nota baixa.
 
-**Decisão em aberto (Fase 2):** definir o reprocessamento das avaliações `invalida` (automático ou manual) e como o dono é avisado. Enquanto isso não for decidido, uma avaliação crítica com saída inválida fica sem alerta, o que conflita com a prioridade de não perder um alerta crítico. Alternativas a considerar: alerta genérico "classificação falhou, verificar manualmente", reprocessamento imediato ou aviso no resumo semanal.
+**Decisão tomada (31/10/2026), Fase 2:** reprocessamento das avaliações `invalida`. O critério: sem ruído e sem presumir. Regras:
 
-**Decisão tomada (31/10/2026), Fase 2:** comportamento do `POST /avaliacoes` diante de falhas do classificador. O critério: nada fica gravado pela metade, e a v1 não tem terceiro estado de classificação nem reprocessador. Regras:
+- Não há reprocessamento automático nem alerta genérico. O reprocessamento é manual, por `scripts/reprocessar_invalidas.py` (a implementar na implementação seguinte): reclassifica cada avaliação `invalida` com a regra de retentativa congelada. No sucesso, atualiza a avaliação para `ok` com `categorias` e `criticidade`; se sair marcação crítica, cria o alerta (já com `tardio` = 1, fora do critério 5) no mesmo passo da atualização. O `criado_em` desse alerta é o instante em que o script o grava (UTC), e a janela de 5 minutos conta a partir dele. O próprio script envia o alerta logo depois de gravá-lo, pela regra de envio da decisão de recuperação (incrementa `tentativas` antes de cada envio); o script faz uma tentativa, sem retentativa imediata; esse envio não é reenvio e não leva a linha de instante de criação. Se ela falhar, o alerta fica `falhou` e a chamada horária o retoma enquanto `tentativas` for menor que 5; com o Telegram não configurado, o alerta continua `pendente`.
+- O resumo semanal lista todas as avaliações `invalida` da semana (`id_externo` e nota, sem texto) como "classificação falhou, verificar manualmente", porque a avaliação `invalida` é gravada sem `criticidade` e o sistema não sabe se ela é crítica. Uma avaliação `invalida` existente na semana conta como algo a decidir para o campo `enviar` do `GET /resumo-semanal`.
+- Limitação registrada: nenhuma rota expõe o texto de uma avaliação `invalida`; o dono confere pelo `id_externo` no app de origem.
+- Limitação registrada: não há alerta imediato para um crítico com saída inválida. Alertar toda `invalida` com nota baixa fica para uma versão futura, porque a especificação ainda não define nota baixa.
+
+**Decisão tomada (31/10/2026), Fase 2:** comportamento do `POST /avaliacoes` diante de falhas do classificador. O critério: nada fica gravado pela metade, e a v1 não tem terceiro estado de classificação nem reprocessamento automático. Regras:
 
 - Saída inválida (conteúdo ruim depois da regra de retentativa): a avaliação é gravada como `invalida`, conforme a decisão acima.
 - Falha técnica esgotada (timeout, erro de conexão, 408, 409, 429 ou 5xx depois das 3 chamadas): o endpoint devolve 503 e não grava nada. O simulador reenvia a avaliação depois.
 - Erro permanente da API (400, 401, 403 e outros), que indica problema de configuração: o endpoint devolve 500 e não grava nada. O erro não é repetido.
-- Risco aceito: se a avaliação não for reenviada, ela se perde, inclusive uma avaliação crítica. Isso faz parte da decisão em aberto sobre reprocessamento.
+- Risco aceito: se a avaliação não for reenviada, ela se perde, inclusive uma avaliação crítica. O reprocessamento manual das `invalida` não recupera uma avaliação que nunca foi gravada.
 - Respostas: 201 quando a avaliação é gravada, com `avaliacao_id`, `criada` verdadeiro e `alerta_id` (nulo quando a avaliação não gerou alerta). Isso inclui a avaliação gravada como `invalida`, que recebe 201 com `alerta_id` nulo e não deve ser tratada como erro nem reenviada. 200 com `avaliacao_id` e `criada` falso quando o `id_externo` já existe (duplicata). 401 sem chave, com chave errada ou com `RADAR_API_KEY` não configurada (ausente ou vazia, o que recusa toda requisição), conferida antes de ler o corpo. 422 para corpo que não é JSON ou objeto, campo ausente ou de tipo errado, `id_externo` vazio e `recebida_em` ilegível, sem fuso ou fora do intervalo. 500 genérico, sem detalhe, para erro permanente da API, falha inesperada, `RADAR_DB` ausente ou chave da Anthropic ausente.
 
 **Decisão tomada (31/10/2026), Fase 2:** simulador de avaliações (`scripts/simulador.py`). Regras:
@@ -124,7 +148,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - Falhas: 503 e erro de rede reenviam a mesma avaliação (3 tentativas, esperas de 5 s e 15 s); 401 interrompe o envio; 422 e 500 são registrados sem reenvio. Reenviar é seguro, porque a duplicata responde 200.
 - Parada por falhas seguidas: o simulador para depois de 3 falhas finais seguidas, de qualquer tipo (503 ou rede esgotados, 422, 500 ou código inesperado); um 200 ou 201 zera a contagem. Sai com código 4; o 401 continua parando na hora, com código 3.
 - Parâmetros: a semana inicial padrão é a segunda-feira que abre as 4 semanas completas anteriores à semana atual (America/Sao\_Paulo); as avaliações são enviadas em ordem de `recebida_em`, com timeout de 60 s e 2 s de intervalo, e a chave vem de `RADAR_API_KEY`. Erro de transporte que não é de rede (por exemplo, URL com esquema inválido) não é reenviado.
-- `scripts/medir_alertas.py` abre o banco só para leitura e mostra a contagem de alertas por estado e o mínimo, a mediana e o máximo de `enviado_em − criado_em` dos `enviado`. O tempo inclui a classificação, porque `criado_em` é a entrada no endpoint, e inclui o reenvio nos alertas com nova tentativa.
+- `scripts/medir_alertas.py` abre o banco só para leitura e mostra a contagem de alertas por estado e o mínimo, a mediana e o máximo de `enviado_em − criado_em` dos `enviado`. O tempo inclui a classificação, porque `criado_em` é a entrada no endpoint, e inclui o reenvio nos alertas com nova tentativa do envio inicial. Hoje o script mede todos os `enviado`; a partir da implementação seguinte, mede só os `enviado` com `tardio` = 0, conforme a decisão sobre a recuperação de alertas. Em um banco sem a coluna `tardio`, o script conta todos como `tardio` = 0 (antes da coluna, todo envio era inicial), avisa uma vez na saída e continua somente leitura.
 
 **Decisão tomada (30/10/2026), Fase 2:** cada ação registrada fica ligada às avaliações que serviram de evidência, na tabela `acao_avaliacoes`. O critério: o sistema guarda o que o dono viu quando decidiu. Regras:
 
@@ -135,7 +159,14 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - O histórico permite consultar a ação, suas evidências e o texto original de cada avaliação.
 - A medição do efeito continua usando `categoria` e `semana_inicio`, e não usa essa tabela.
 
-**Decisão em aberto (Fase 2):** definir como o `POST /api/painel/{token}/acoes` recebe as evidências exibidas e como o servidor confere que elas pertencem ao card (por exemplo, que a avaliação é da categoria e da semana do card e que `trecho_exibido` vem do texto dela), sem recalcular o ranking. Considerar que um `trecho_exibido` vindo do cliente é texto não confiável: pode ser forjado e, se o painel o renderizar sem tratamento, permitir XSS armazenado. A decisão deve dizer se o servidor o deriva do texto da avaliação em vez de aceitá-lo.
+**Decisão tomada (31/10/2026), Fase 2:** evidências do `POST /api/painel/{token}/acoes`. O critério: o servidor nunca confia em texto do cliente. Regras:
+
+- O corpo traz `categoria`, `semana_inicio` (segunda-feira local) e de 1 a 3 evidências, cada uma só com `avaliacao_id` e `posicao` (de 1 a 3, distintas, e com `avaliacao_id` distintos). Qualquer outro campo, inclusive `trecho_exibido`, é recusado com 422.
+- O servidor confere que cada avaliação existe, foi recebida na semana do card e tem a categoria do card, e que a categoria participa do ranking (`entregador` é recusado). Não recalcula o ranking nem confere se o card estava entre os 3.
+- O `trecho_exibido` é derivado pelo servidor do texto da avaliação, pela mesma função usada no `GET /api/painel/{token}/cards`: os primeiros 140 caracteres, cortados em limite de palavra, com reticências. O que o dono vê no card é o que fica gravado.
+- O painel renderiza todo texto de avaliação como texto puro (`textContent`), nunca como HTML.
+- Token inválido segue a regra uniforme do 404.
+- Os códigos de erro, a regra contra ação duplicada e a conferência de que a avaliação estava no card ficam para a Fase 4, ao desenhar o painel.
 
 **Decisão tomada (31/10/2026), Fase 2:** esquema de `acao_avaliacoes`, integridade e datas, adotados na camada de persistência (`app/banco.py`). Regras:
 
@@ -156,7 +187,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - **Linha de cobertura fixa:** total de avaliações lidas, cards, temas monitorados sem ação e avaliações que a IA não conseguiu classificar (saída inválida). Quando o mínimo de avaliações para comparar a tendência não é atingido em alguma das duas semanas, a linha traz "tendência não calculada: amostra pequena".
 - **Sem presumir causa:** o texto diz "o padrão sugere" e recomenda investigar. Entregador nunca gera ação interna.
 - **Alerta crítico:** sai na hora em que a avaliação entra no endpoint, com o texto "relato a verificar", em uma mensagem por avaliação que lista todos os tipos identificados. Os casos críticos também contam no resumo semanal. O alerta pode ser enviado automaticamente ao dono, sempre como relato a verificar. Respostas públicas aos clientes nunca são enviadas automaticamente.
-- **Resumo semanal:** segunda-feira às 8h, no fuso America/Sao\_Paulo. Só é enviado se houver algo a decidir, exceto em semana de volume pequeno (menos de N = 20 avaliações), quando, mesmo sem cards, sai um aviso curto; um indicador "última leitura" no painel mostra que o sistema está vivo.
+- **Resumo semanal:** segunda-feira às 8h, no fuso America/Sao\_Paulo. Só é enviado se houver algo a decidir, exceto em semana de volume pequeno (menos de N = 20 avaliações), quando, mesmo sem cards e sem nenhum outro motivo para enviar, sai um aviso curto; um indicador "última leitura" no painel mostra que o sistema está vivo.
 - **Medição do efeito:** compara a taxa de menções por 100 avaliações entre semanas, antes e depois de uma ação concluída. É uma comparação simulada e não prova causalidade.
 - **Prazo de resposta:** cada avaliação guarda o prazo de 5 dias do iFood, para a versão futura de respostas em lote ([fonte](https://blog-parceiros.ifood.com.br/avaliacoes-e-moderacoes/)). Na v1, os rascunhos de resposta em lote são opcionais e o primeiro corte se houver atraso.
 
@@ -183,7 +214,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - **Peso e tendência:** com as mesmas menções, o peso de gravidade pesa mais do que a tendência. Uma categoria de peso 2 em alta (2 × 1,25 = 2,5) ainda fica abaixo de uma de peso 3 sem alta (3). É intencional.
 - **Desempate:** quando as pontuações são iguais, ordena-se por maior peso de gravidade, depois por mais menções e, por último, pelo identificador da categoria em ordem alfabética. Os mesmos dados produzem sempre a mesma ordem.
 - **Amostra mínima:** o fator de tendência só é calculado se as duas semanas comparadas têm pelo menos N = 20 avaliações. Caso contrário, vale 1,0. Os cards continuam sendo calculados por menções × gravidade, apenas sem o bônus de tendência. Se a semana anterior tem amostra suficiente e taxa 0, um aumento real vale 1,25.
-- **Resumo com volume pequeno:** a semana com menos de N avaliações ainda gera resumo. Se houver cards, o resumo sai normalmente. Se não houver nenhum, sai um aviso curto com o total de avaliações lidas, para que o silêncio não seja confundido com sistema parado. A linha de cobertura traz "tendência não calculada: amostra pequena" quando o mínimo não é atingido em alguma das duas semanas.
+- **Resumo com volume pequeno:** a semana com menos de N avaliações ainda gera resumo. Se houver cards, o resumo sai normalmente. Se não houver nenhum e nada mais motivar o envio, sai um aviso curto com o total de avaliações lidas, para que o silêncio não seja confundido com sistema parado. A linha de cobertura traz "tendência não calculada: amostra pequena" quando o mínimo não é atingido em alguma das duas semanas.
 - **`mencoes`:** número de avaliações da semana que têm a categoria; uma avaliação conta uma vez por categoria. A semana é o intervalo de segunda-feira 00:00 (inclusive) até a segunda-feira seguinte 00:00 (exclusive), no fuso America/Sao\_Paulo, pelo campo `recebida_em`. Uma avaliação recebida na segunda-feira, mesmo antes das 8h, pertence à semana que começa nessa segunda; o resumo de segunda às 8h cobre a semana que terminou. O denominador de "por 100 avaliações" é o total de avaliações recebidas na semana, inclusive as positivas, as sem categoria e as de saída inválida.
 - **Avaliações críticas:** contam em `mencoes` das suas categorias operacionais e podem ser evidência de um card, mantendo o rótulo "relato a verificar". O alerta crítico segue o fluxo próprio.
 - **Configuração:** pesos, fator de tendência e N ficam em um arquivo de configuração versionado no código. O ranking exibido não é gravado, então mudar um valor muda o ranking calculado de semanas passadas. Para as ações registradas, o sistema guarda as evidências exibidas (`acao_avaliacoes`), mas não a pontuação, a posição do card nem a versão dos pesos.
@@ -200,9 +231,9 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 **Decisão tomada (31/10/2026), Fase 2:** `GET /resumo-semanal` (`app/resumo.py`). Regras:
 
 - Parâmetro opcional `?semana=AAAA-MM-DD`, que precisa ser uma segunda-feira (data local de America/Sao\_Paulo); fora disso, 422. Sem ele, vale a última semana completa. A chave é conferida antes do parâmetro.
-- A resposta traz `periodo`, `total`, `negativas`, `invalidas`, até 3 `cards` (categoria, menções, taxa por 100 com 1 casa, tendência em alta, problema e recomendação da tabela de categorias; sem pontuação), `outros_temas`, `temas_sem_acao`, `criticos`, `acoes_pendentes`, `cobertura`, `enviar`, `mensagem` (texto simples, com "o padrão sugere") e `link_painel`.
-- "Algo a decidir" significa pelo menos um card, um crítico ou uma ação pendente. `enviar` é verdadeiro nesses casos e também em semana com menos de N avaliações (inclusive 0), quando sai o aviso curto com o total lido.
-- Cada crítico mostra o estado do alerta (`pendente`, `enviado`, `falhou` ou nulo, se não houver alerta). A recuperação de alertas `pendente` e `falhou` continua em aberto.
+- A resposta traz `periodo`, `total`, `negativas`, `invalidas`, até 3 `cards` (categoria, menções, taxa por 100 com 1 casa, tendência em alta, problema e recomendação da tabela de categorias; sem pontuação), `outros_temas`, `temas_sem_acao`, `criticos`, `invalidas_a_verificar` (lista com `id_externo` e nota, sem texto), `alertas_falhos` (os alertas em estado `falhou` com `reconhecido_em` nulo, de qualquer semana, com `id_externo`, `tipos` e `criado_em`, este em ISO com fuso America/Sao\_Paulo, como `periodo`), `acoes_pendentes`, `cobertura`, `enviar`, `mensagem` (texto simples, que começa com "(dados simulados)" e usa "o padrão sugere") e `link_painel`.
+- "Algo a decidir" significa pelo menos um card, um crítico, uma avaliação `invalida`, um alerta `falhou` não reconhecido ou uma ação pendente. `enviar` é verdadeiro nesses casos e também em semana com menos de N avaliações (inclusive 0). O aviso curto com o total lido só sai quando nada além do volume pequeno motivou o envio; havendo qualquer outro motivo, a mensagem sai no formato normal, com os cards (se houver), as seções correspondentes e o total lido.
+- Cada crítico mostra o estado do alerta (`pendente`, `enviado`, `falhou` ou nulo, se não houver alerta) e a marca "reconhecido" quando o alerta tem `reconhecido_em`. Um alerta `falhou` reconhecido continua em `criticos` da sua semana, com o estado e a marca, e sai de `alertas_falhos`. Na `mensagem`, os críticos da semana mostram o estado do alerta, e a seção "Alertas que não chegaram" lista só os `falhou` não reconhecidos de outras semanas (o JSON pode repetir; a mensagem não repete). A recuperação de alertas `pendente` e `falhou` está na decisão sobre a recuperação de alertas.
 - Ação pendente é a de estado `pendente` ou `em_andamento`, de qualquer semana.
 - O link do painel é `RADAR_URL_BASE/painel/<token>`. `RADAR_URL_BASE` vem do ambiente (http ou https, sem barra final); ausente ou inválida, a rota responde 500 e não cria token.
 - Efeito colateral: o GET cria um token novo em `tokens_painel` a cada chamada com `enviar` verdadeiro, e nenhum quando é falso. É a única escrita da rota, e a resposta vai com `Cache-Control: no-store`.
@@ -241,7 +272,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | 2 | Casos críticos | 15 casos críticos testados, com recall geral e por tipo; falsos alertas contados nos 50 gerais | 1 |
 | 3 | Sem duplicidade | Reenviar a mesma avaliação não gera outra avaliação nem outro alerta | 2 |
 | 4 | Segurança | Endpoint sem chave e link expirado são recusados | 2 |
-| 5 | Alerta imediato | Tempo medido entre a entrada no endpoint e a confirmação do Telegram | 3 |
+| 5 | Alerta imediato | Tempo medido entre a entrada no endpoint e a confirmação do Telegram, só os alertas com `tardio` = 0 (o envio inicial) | 3 |
 | 6 | Resumo semanal | Workflow do n8n executado manualmente, com histórico de execução | 3 |
 | 7 | Painel com persistência e histórico | Registrar ação, reiniciar o servidor e recuperar; consultar semanas anteriores | 4 |
 | 8 | Decisão em 2 minutos | Teste dos 2 minutos, com o procedimento descrito abaixo da tabela | 4 |
@@ -275,7 +306,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | Orquestração de agentes (Claude, GPT, Gemini) | Classificador, priorizador/diagnóstico e (opcional) redator de respostas como papéis separados; um deles pode ser trocado de modelo para comparar |
 | Automações com n8n, Make ou Zapier | Workflow semanal no n8n: agenda, chama `GET /resumo-semanal`, envia pelo Telegram |
 | Vibe coding (Cursor, v0, Bolt, Replit) | Painel mobile-first feito em uma dessas ferramentas, ligado à API |
-| APIs sem backend profundo | FastAPI pequeno com 7 rotas e SQLite |
+| APIs sem backend profundo | FastAPI pequeno com 8 rotas e SQLite |
 | Análise de dados com IA | Classificação, agregação por semana, tendência e métricas de avaliação |
 | Redesenhar a função criando agentes | Documento "antes e depois" do trabalho de ler avaliações, com tempo manual estimado e tempo no painel |
 | Aprender o Toqan (plataforma interna do iFood) | Não há acesso público encontrado; o conceito de agente (instruções, ferramentas e conhecimento) é praticado nos papéis acima |
