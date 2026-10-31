@@ -188,6 +188,15 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - **Avaliações críticas:** contam em `mencoes` das suas categorias operacionais e podem ser evidência de um card, mantendo o rótulo "relato a verificar". O alerta crítico segue o fluxo próprio.
 - **Configuração:** pesos, fator de tendência e N ficam em um arquivo de configuração versionado no código. O ranking exibido não é gravado, então mudar um valor muda o ranking calculado de semanas passadas. Para as ações registradas, o sistema guarda as evidências exibidas (`acao_avaliacoes`), mas não a pontuação, a posição do card nem a versão dos pesos.
 
+**Decisão tomada (31/10/2026), Fase 2:** cálculo do ranking dos cards (`config/ranking.json`, `app/ranking.py`). Regras:
+
+- A configuração é um JSON com `pesos` (as seis categorias; inteiro positivo ou `null` para `entregador`, que fica fora do ranking), `fator_tendencia` (número maior que 1) e `amostra_minima` (inteiro maior ou igual a 1). Chave ausente, chave ou categoria desconhecida e valor fora do tipo são recusados ao carregar.
+- Taxas, fator e pontuação são frações exatas, sem ponto flutuante. O aumento da taxa é comparado por multiplicação cruzada de inteiros: `mencoes_atual × total_anterior > mencoes_anterior × total_atual`.
+- "Outros temas" são as categorias do ranking com menções que ficaram fora dos 3 cards, na mesma ordem. "Temas monitorados sem ação" são as categorias fora do ranking (`entregador`), sempre listadas com suas menções.
+- Avaliação negativa é a de nota menor ou igual a 2.
+- O validador da configuração recusa um `fator_tendencia` que viole "peso vence tendência": para cada par de pesos distintos consecutivos, `fator × menor_peso` deve ser menor que `maior_peso`. Com pesos 2 e 3, 1,5 é recusado e 1,49 é aceito; com 1,25 continua valendo.
+- O resultado do ranking traz `motivo_sem_tendencia`: `null` quando a tendência foi calculada; `sem_semana_anterior` quando não há semana anterior, com o texto de cobertura "tendência não calculada: sem semana anterior"; `amostra_pequena` quando a semana anterior existe, mas uma das duas semanas tem menos de N avaliações, com o texto "tendência não calculada: amostra pequena". O endpoint passa `anterior=None` quando a semana anterior tem 0 avaliações.
+
 ## Avaliação, critérios de aceitação e cronograma
 
 **A v1 só está pronta quando a classificação é medida e os oito critérios abaixo são comprovados.**

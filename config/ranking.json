@@ -1,0 +1,12 @@
+{
+  "pesos": {
+    "qualidade_temperatura": 3,
+    "item_faltando": 3,
+    "atraso": 2,
+    "embalagem": 2,
+    "atendimento": 2,
+    "entregador": null
+  },
+  "fator_tendencia": 1.25,
+  "amostra_minima": 20
+}
