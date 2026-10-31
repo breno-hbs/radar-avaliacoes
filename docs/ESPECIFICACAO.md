@@ -52,7 +52,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | Rota | Quem chama | Autenticação | O que faz |
 | --- | --- | --- | --- |
 | `POST /avaliacoes` | Simulador | Cabeçalho `X-API-Key` | Recebe `id_externo`, `texto`, `nota`, `recebida_em` (com fuso). Valida, ignora duplicata, classifica e, se houver marcação crítica, cria um único alerta com todos os tipos identificados |
-| `GET /resumo-semanal` | n8n | `X-API-Key` | Devolve período, total, negativas, 3 principais problemas, críticos, ações pendentes e o link do painel |
+| `GET /resumo-semanal` | n8n | `X-API-Key` | Devolve período, total, negativas, 3 principais problemas, críticos (com o estado do alerta de cada um), ações pendentes e o link do painel |
 | `GET /painel/{token}` | Dono (navegador) | Token com validade (tokens\_painel) | Serve a página mobile-first |
 | `GET /api/painel/{token}/cards` | Painel | Token | Cards com problema, evidências e recomendação |
 | `POST /api/painel/{token}/acoes` | Painel | Token | Registra uma ação e as evidências exibidas no card |
@@ -97,7 +97,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Prioridade:** não perder um alerta crítico. Um alerta `falhou` continua registrado no banco, e o caso também aparece no resumo semanal. Como garantir que um alerta `pendente` ou `falhou` seja entregue é a decisão em aberto abaixo.
 
-**Decisão em aberto (Fase 2):** definir a recuperação de alertas `pendente` após o reinício do servidor e o tratamento dos alertas `falhou` (reenvio automático, reenvio manual ou apenas o registro). Registrar o alerta no banco e mostrá-lo no resumo semanal não equivale a garantir aviso imediato ao dono: um alerta `pendente` ou `falhou` pode ficar sem ser entregue até o próximo resumo. Definir também se o resumo semanal mostra o estado do alerta (`pendente`, `enviado` ou `falhou`), já que o contrato de `GET /resumo-semanal` não o inclui.
+**Decisão em aberto (Fase 2):** definir a recuperação de alertas `pendente` após o reinício do servidor e o tratamento dos alertas `falhou` (reenvio automático, reenvio manual ou apenas o registro). Registrar o alerta no banco e mostrá-lo no resumo semanal não equivale a garantir aviso imediato ao dono: um alerta `pendente` ou `falhou` pode ficar sem ser entregue até o próximo resumo. O resumo semanal mostra o estado do alerta (decisão de 31/10/2026, GET /resumo-semanal); a recuperação de alertas pendente e falhou continua em aberto.
 
 **Decisão tomada (31/10/2026), Fase 2:** a coluna `confianca` é substituída por `status_classificacao`, com os valores `ok` e `invalida`. O critério: o classificador congelado da v1 devolve só `categorias` e `criticidade`, sem nenhum valor de confiança, e pedir um ao modelo alteraria o prompt e o esquema congelados (seria uma v2, com conjunto novo de avaliação). Regras:
 
@@ -196,6 +196,19 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - Avaliação negativa é a de nota menor ou igual a 2.
 - O validador da configuração recusa um `fator_tendencia` que viole "peso vence tendência": para cada par de pesos distintos consecutivos, `fator × menor_peso` deve ser menor que `maior_peso`. Com pesos 2 e 3, 1,5 é recusado e 1,49 é aceito; com 1,25 continua valendo.
 - O resultado do ranking traz `motivo_sem_tendencia`: `null` quando a tendência foi calculada; `sem_semana_anterior` quando não há semana anterior, com o texto de cobertura "tendência não calculada: sem semana anterior"; `amostra_pequena` quando a semana anterior existe, mas uma das duas semanas tem menos de N avaliações, com o texto "tendência não calculada: amostra pequena". O endpoint passa `anterior=None` quando a semana anterior tem 0 avaliações.
+
+**Decisão tomada (31/10/2026), Fase 2:** `GET /resumo-semanal` (`app/resumo.py`). Regras:
+
+- Parâmetro opcional `?semana=AAAA-MM-DD`, que precisa ser uma segunda-feira (data local de America/Sao\_Paulo); fora disso, 422. Sem ele, vale a última semana completa. A chave é conferida antes do parâmetro.
+- A resposta traz `periodo`, `total`, `negativas`, `invalidas`, até 3 `cards` (categoria, menções, taxa por 100 com 1 casa, tendência em alta, problema e recomendação da tabela de categorias; sem pontuação), `outros_temas`, `temas_sem_acao`, `criticos`, `acoes_pendentes`, `cobertura`, `enviar`, `mensagem` (texto simples, com "o padrão sugere") e `link_painel`.
+- "Algo a decidir" significa pelo menos um card, um crítico ou uma ação pendente. `enviar` é verdadeiro nesses casos e também em semana com menos de N avaliações (inclusive 0), quando sai o aviso curto com o total lido.
+- Cada crítico mostra o estado do alerta (`pendente`, `enviado`, `falhou` ou nulo, se não houver alerta). A recuperação de alertas `pendente` e `falhou` continua em aberto.
+- Ação pendente é a de estado `pendente` ou `em_andamento`, de qualquer semana.
+- O link do painel é `RADAR_URL_BASE/painel/<token>`. `RADAR_URL_BASE` vem do ambiente (http ou https, sem barra final); ausente ou inválida, a rota responde 500 e não cria token.
+- Efeito colateral: o GET cria um token novo em `tokens_painel` a cada chamada com `enviar` verdadeiro, e nenhum quando é falso. É a única escrita da rota, e a resposta vai com `Cache-Control: no-store`.
+- O histórico de execução do n8n guarda a resposta com o link em claro, válido por 7 dias e com escopo só de painel. O risco é aceito e documentado. O workflow do n8n envia a mensagem sem `parse_mode`, porque o token pode ter `_`.
+- `?semana=` aceita a semana atual (ainda incompleta) e semanas futuras, que resultam em volume pequeno.
+- O título do card é um nome curto por categoria (por exemplo, "Item ausente ou errado"), e não a descrição longa da tabela de categorias.
 
 ## Avaliação, critérios de aceitação e cronograma
 
