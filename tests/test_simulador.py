@@ -467,3 +467,106 @@ def test_chave_do_env_e_aparada(monkeypatch):
     monkeypatch.setattr(simulador.time, "sleep", lambda s: None)
     simulador.main(["--semana-inicio", "2026-10-05"], transporte=httpx.MockTransport(tratar))
     assert set(vistos) == {CHAVE}
+
+
+# ---------- parar após 3 falhas finais seguidas ----------
+
+OK = (201, {"avaliacao_id": 1, "criada": True, "alerta_id": None})
+
+
+def test_para_na_terceira_falha_seguida_e_nao_envia_a_quarta(sem_espera):
+    esperas, _ = sem_espera
+    vistos = []
+    resumo = _enviar(_corpos(5), {
+        "x-0": [(404, {})], "x-1": [(403, {})], "x-2": [(502, {})], "x-3": [OK], "x-4": [OK],
+    }, esperas, vistos)
+    assert resumo.parou_por_falhas_seguidas is True
+    assert [c["id_externo"] for c, _ in vistos] == ["x-0", "x-1", "x-2"]
+    assert resumo.falhas == ["x-0", "x-1", "x-2"]
+
+
+def test_dois_falhas_e_um_sucesso_zeram_a_contagem(sem_espera):
+    esperas, _ = sem_espera
+    resumo = _enviar(_corpos(6), {
+        "x-0": [(404, {})], "x-1": [(404, {})], "x-2": [OK],
+        "x-3": [(404, {})], "x-4": [(404, {})], "x-5": [OK],
+    }, esperas)
+    assert resumo.parou_por_falhas_seguidas is False
+    assert resumo.total == 6 and resumo.criadas == 2
+
+
+def test_duplicata_200_tambem_zera_a_contagem(sem_espera):
+    esperas, _ = sem_espera
+    resumo = _enviar(_corpos(4), {
+        "x-0": [(404, {})], "x-1": [(404, {})], "x-2": [(200, {"avaliacao_id": 1, "criada": False})],
+        "x-3": [(404, {})],
+    }, esperas)
+    assert resumo.parou_por_falhas_seguidas is False and resumo.total == 4
+
+
+def test_422_e_500_seguidos_tambem_param_sem_reenviar(sem_espera):
+    esperas, _ = sem_espera
+    vistos = []
+    resumo = _enviar(_corpos(5), {
+        "x-0": [(422, {})], "x-1": [(500, {})], "x-2": [(422, {})], "x-3": [OK], "x-4": [OK],
+    }, esperas, vistos)
+    assert resumo.parou_por_falhas_seguidas is True
+    assert resumo.reenvios == 0 and len(vistos) == 3
+    assert (resumo.erros_422, resumo.erros_500) == (2, 1)
+
+
+def test_tres_503_esgotados_seguidos_param_sem_esperar_o_intervalo_depois_da_terceira(sem_espera):
+    esperas, _ = sem_espera
+    resumo = _enviar(_corpos(5), {
+        "x-0": [(503, {})] * 3, "x-1": [(503, {})] * 3, "x-2": [(503, {})] * 3,
+        "x-3": [OK], "x-4": [OK],
+    }, esperas, intervalo=2)
+    assert resumo.parou_por_falhas_seguidas is True
+    assert resumo.falhas_finais == 3
+    # 3 avaliações x (5, 15) e só 2 intervalos (entre 1ª-2ª e 2ª-3ª); nenhum depois da 3ª
+    assert esperas == [5, 15, 2, 5, 15, 2, 5, 15]
+
+
+def test_erro_de_rede_seguido_tambem_para(sem_espera):
+    esperas, _ = sem_espera
+    resumo = _enviar(_corpos(4), {
+        f"x-{i}": [httpx.ConnectError("x")] * 3 for i in range(4)
+    }, esperas, intervalo=0)
+    assert resumo.parou_por_falhas_seguidas is True and resumo.total == 3
+
+
+def test_401_continua_parando_na_hora_e_nao_marca_falhas_seguidas(sem_espera):
+    esperas, _ = sem_espera
+    resumo = _enviar(_corpos(3), {"x-0": [(401, {})], "x-1": [OK], "x-2": [OK]}, esperas)
+    assert resumo.interrompido_por_401 is True
+    assert resumo.parou_por_falhas_seguidas is False and resumo.total == 1
+
+
+def test_main_com_falhas_seguidas_sai_com_codigo_4_e_mensagem_curta(monkeypatch, capsys, caplog):
+    monkeypatch.setenv("RADAR_API_KEY", CHAVE)
+    monkeypatch.setattr(simulador, "load_dotenv", lambda *a, **k: False)
+    monkeypatch.setattr(simulador.time, "sleep", lambda s: None)
+    transporte = httpx.MockTransport(lambda r: httpx.Response(502, json={"detail": "x"}))
+    codigo = simulador.main(
+        ["--semana-inicio", "2026-10-05", "--url", "http://usuario:segredo@127.0.0.1:8000"],
+        transporte=transporte,
+    )
+    saida = capsys.readouterr()
+    todo = saida.out + saida.err + caplog.text
+    assert codigo == 4
+    assert "PARADO: 3 avaliações seguidas falharam; confira se o servidor está no ar, a URL e a chave" in todo
+    assert "segredo" not in todo and CHAVE not in todo and "127.0.0.1" not in todo
+    assert "falhas seguidas" in saida.out.lower()  # campo do resumo
+    assert "total enviado:            3" in saida.out
+    for a in simulador.carregar_avaliacoes():
+        assert a["texto"] not in todo
+
+
+def test_main_sem_falhas_seguidas_nao_mostra_a_mensagem_de_parada(monkeypatch, capsys):
+    monkeypatch.setenv("RADAR_API_KEY", CHAVE)
+    monkeypatch.setattr(simulador, "load_dotenv", lambda *a, **k: False)
+    monkeypatch.setattr(simulador.time, "sleep", lambda s: None)
+    transporte = httpx.MockTransport(
+        lambda r: httpx.Response(201, json={"avaliacao_id": 1, "criada": True, "alerta_id": None}))
+    assert simulador.main(["--semana-inicio", "2026-10-05"], transporte=transporte) == 0
+    assert "PARADO" not in capsys.readouterr().out

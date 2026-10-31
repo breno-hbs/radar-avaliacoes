@@ -41,6 +41,7 @@ TIMEOUT_SEGUNDOS = 60
 ESPERAS_503 = (5, 15)  # entre a 1ª e a 2ª tentativa, e entre a 2ª e a 3ª
 HORA_INICIAL, HORA_FINAL = 11, 22  # 11:00 a 22:59
 URL_PADRAO = "http://127.0.0.1:8000"
+MAX_FALHAS_SEGUIDAS = 3  # falhas finais seguidas (de qualquer tipo) que interrompem o envio
 
 for _nome in ("httpx", "httpcore"):
     logging.getLogger(_nome).setLevel(logging.WARNING)
@@ -129,6 +130,7 @@ class Resumo:
     outros: int = 0
     falhas: list = field(default_factory=list)
     interrompido_por_401: bool = False
+    parou_por_falhas_seguidas: bool = False
     id_do_401: str = ""
 
 
@@ -154,6 +156,7 @@ def _enviar_uma(cliente, corpo, resumo, dormir):
 def enviar(corpos, *, url=URL_PADRAO, chave, intervalo=2, transporte=None, dormir=time.sleep):
     """Envia os corpos em ordem. Para na hora num 401. Nunca imprime a chave nem o texto."""
     resumo = Resumo()
+    seguidas = 0
     with httpx.Client(
         base_url=url, timeout=TIMEOUT_SEGUNDOS, headers={"X-API-Key": chave}, transport=transporte
     ) as cliente:
@@ -163,6 +166,7 @@ def enviar(corpos, *, url=URL_PADRAO, chave, intervalo=2, transporte=None, dormi
             resumo.total += 1
             resposta = _enviar_uma(cliente, corpo, resumo, dormir)
             id_externo = corpo["id_externo"]
+            falhou = True
             if resposta is None:
                 resumo.falhas_finais += 1
                 resumo.falhas.append(id_externo)
@@ -172,6 +176,7 @@ def enviar(corpos, *, url=URL_PADRAO, chave, intervalo=2, transporte=None, dormi
                 resumo.falhas.append(id_externo)
                 break
             elif resposta.status_code in (200, 201):
+                falhou = False
                 if resposta.status_code == 201:
                     resumo.criadas += 1
                     if _alerta_id(resposta) is not None:
@@ -186,6 +191,10 @@ def enviar(corpos, *, url=URL_PADRAO, chave, intervalo=2, transporte=None, dormi
                 else:
                     resumo.outros += 1
                 resumo.falhas.append(id_externo)
+            seguidas = seguidas + 1 if falhou else 0
+            if seguidas >= MAX_FALHAS_SEGUIDAS:
+                resumo.parou_por_falhas_seguidas = True
+                break  # sai antes do intervalo do próximo envio
     return resumo
 
 
@@ -202,6 +211,11 @@ def imprimir_resumo(resumo: Resumo):
             f"PARADO no 401 (avaliação {resumo.id_do_401}): a chave foi recusada. Confira RADAR_API_KEY "
             "no .env do simulador e a mesma variável no servidor."
         )
+    if resumo.parou_por_falhas_seguidas:
+        print(
+            f"PARADO: {MAX_FALHAS_SEGUIDAS} avaliações seguidas falharam; confira se o servidor está no "
+            "ar, a URL e a chave."
+        )
     print("Resumo do simulador (dados simulados)")
     print(f"  total enviado:            {resumo.total}")
     print(f"  criadas:                  {resumo.criadas}")
@@ -213,6 +227,7 @@ def imprimir_resumo(resumo: Resumo):
     print(f"  500:                      {resumo.erros_500}")
     if resumo.outros:
         print(f"  outros códigos:           {resumo.outros}")
+    print(f"  parou por falhas seguidas: {'sim' if resumo.parou_por_falhas_seguidas else 'não'}")
     print(f"  id_externo que falharam:  {', '.join(resumo.falhas) if resumo.falhas else '(nenhum)'}")
 
 
@@ -279,6 +294,8 @@ def main(argv=None, *, transporte=None) -> int:
     imprimir_resumo(resumo)
     if resumo.interrompido_por_401:
         return 3
+    if resumo.parou_por_falhas_seguidas:
+        return 4
     return 1 if resumo.falhas else 0
 
 
