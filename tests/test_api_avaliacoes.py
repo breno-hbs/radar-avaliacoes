@@ -79,6 +79,7 @@ def novo_cliente(caminho):
         def criar(falso, **kw):
             app = main.criar_app()
             app.dependency_overrides[main.obter_classificador] = lambda: falso
+            app.dependency_overrides[main.obter_notificador] = lambda: None  # Telegram fora destes testes
             return pilha.enter_context(TestClient(app, **kw))
 
         yield criar

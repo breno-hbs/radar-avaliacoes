@@ -1,4 +1,4 @@
-"""API do Radar de Avaliações. Bloco 2.2 da Fase 2: POST /avaliacoes.
+"""API do Radar de Avaliações. POST /avaliacoes (bloco 2.2) e alerta crítico via Telegram (bloco 2.3).
 
 Fonte da verdade: docs/ESPECIFICACAO.md. Servidor: uvicorn app.main:app
 
@@ -6,6 +6,7 @@ Variáveis de ambiente (nunca no código nem no Git):
 - RADAR_API_KEY: chave esperada no cabeçalho X-API-Key. Ausente ou vazia, toda requisição é recusada.
 - RADAR_DB: caminho do arquivo SQLite.
 - ANTHROPIC_API_KEY: lida por app/classificador.py (criar_cliente) a partir do .env.
+- RADAR_TELEGRAM_TOKEN e RADAR_TELEGRAM_CHAT_ID: lidas por app/telegram.py a partir do .env.
 """
 
 import hmac
@@ -16,11 +17,11 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Optional
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, StrictInt, StrictStr, field_validator
 
-from app import banco, classificador
+from app import alertas, banco, classificador, telegram
 from app.classificador import ErroPermanenteDaAPI, ErroTecnicoEsgotado
 
 VERSAO_PROMPT = "v1"  # prompt congelado (prompts/classificador/v1.md)
@@ -122,7 +123,21 @@ def obter_classificador():
     return _classificar_com_o_modelo
 
 
-def _processar(nova: NovaAvaliacao, resposta: Response, classificar):
+def obter_notificador():
+    """Dependência substituível: o Telegram de produção, ou None se não estiver configurado."""
+    return telegram.notificador_do_ambiente()
+
+
+def _agora_utc():
+    return datetime.now(timezone.utc)
+
+
+def obter_relogio():
+    """Dependência substituível: devolve a função que dá o instante atual em UTC."""
+    return _agora_utc
+
+
+def _processar(nova: NovaAvaliacao, resposta: Response, classificar, entrada, agendar_alerta):
     caminho = os.environ.get("RADAR_DB")
     if not caminho:
         raise ErroDeConfiguracao("RADAR_DB não definida")
@@ -148,11 +163,15 @@ def _processar(nova: NovaAvaliacao, resposta: Response, classificar):
             categorias=categorias,
             criticidade=criticidade,
             status_classificacao=status,
+            alerta_criado_em=entrada.isoformat(),  # instante de entrada: base do critério 5
         )
 
     if not gravado.criada:  # outra requisição gravou o mesmo id_externo enquanto esta classificava
         resposta.status_code = 200
         return {"avaliacao_id": gravado.avaliacao_id, "criada": False}
+    if gravado.alerta_id is not None:
+        mensagem = alertas.montar_mensagem(gravado.avaliacao_id, criticidade, nova.texto)
+        agendar_alerta(caminho, gravado.alerta_id, mensagem)
     return {"avaliacao_id": gravado.avaliacao_id, "criada": True, "alerta_id": gravado.alerta_id}
 
 
@@ -165,12 +184,21 @@ def criar_app() -> FastAPI:
     def receber_avaliacao(
         nova: NovaAvaliacao,
         resposta: Response,
+        tarefas: BackgroundTasks,
         classificar=Depends(obter_classificador),
+        notificador=Depends(obter_notificador),
+        relogio=Depends(obter_relogio),
     ):
+        entrada = relogio()  # lido uma vez, no início: é o criado_em do alerta
+
+        def agendar_alerta(caminho, alerta_id, mensagem):
+            # Roda depois da resposta: o código HTTP e o corpo não dependem do Telegram.
+            tarefas.add_task(alertas.enviar_alerta, caminho, alerta_id, mensagem, notificador, relogio)
+
         # Nenhuma resposta nem log leva mensagem de exceção, corpo de erro da API ou chave:
         # só o tipo e, para erros da API do classificador, o status e o request_id.
         try:
-            return _processar(nova, resposta, classificar)
+            return _processar(nova, resposta, classificar, entrada, agendar_alerta)
         except ErroTecnicoEsgotado as e:
             logger.warning(
                 "classificador indisponível depois das retentativas (status=%s, request_id=%s)",
