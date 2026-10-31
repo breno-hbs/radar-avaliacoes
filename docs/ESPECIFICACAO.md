@@ -125,14 +125,14 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | `atendimento` | 2 |
 | `entregador` | não participa do ranking |
 
-- A pontuação é `mencoes × gravidade × fator_tendencia`. A contradição anterior, que descrevia a tendência como soma de pontos, está corrigida: a tendência multiplica.
+- A fórmula está no bullet "Pontuação de um problema", acima: gravidade e tendência multiplicam as menções.
 - `fator_tendencia` vale 1,25 quando a taxa de menções por 100 avaliações aumentou em relação à semana anterior. Nos demais casos (taxa igual, taxa menor ou semana anterior não comparável) vale 1,0. A comparação usa a taxa por 100 avaliações, e não a quantidade absoluta, para que uma semana com mais avaliações não conte como crescimento.
-- Nesta configuração inicial nenhuma categoria tem peso 1. Os pesos 2 e 3 não foram escolhidos para preencher faixas.
+- Nesta configuração inicial nenhuma categoria tem peso 1.
 - `entregador` não ocupa um dos três cards, porque o restaurante não tem ação interna definida para ele. As menções continuam contadas e visíveis em "temas monitorados sem ação".
-- Limitação deliberada: `qualidade_temperatura` reúne problemas de intensidades diferentes e todos recebem o mesmo peso 3.
+- Limitação deliberada: `qualidade_temperatura` reúne problemas de intensidades diferentes e todos recebem o mesmo peso 3. A decisão em aberto sobre dividir a categoria está na seção "Categorias e criticidade".
 - Os casos com marcação crítica seguem o fluxo próprio de alertas, independentemente do ranking semanal.
 
-**Decisão em aberto (Fase 2):** definir o desempate entre pontuações iguais e o comportamento do ranking em semanas com poucas avaliações, incluindo a partir de quantas avaliações a comparação de taxa é considerada confiável. Isso deve ser resolvido antes de implementar o ranking.
+**Decisão em aberto (Fase 2):** definir o desempate entre pontuações iguais e o comportamento do ranking em semanas com poucas avaliações, incluindo a partir de quantas avaliações a comparação de taxa é considerada confiável. Isso deve ser resolvido antes de implementar o ranking. Definir também: (a) o que é `mencoes` (avaliações ou menções, janela e fuso) e o denominador de "por 100 avaliações"; (b) o que fazer se a taxa da semana anterior for 0, já que hoje qualquer aumento dá 1,25; (c) se uma avaliação crítica conta em `mencoes` e se pode ser evidência de um card, mantendo o "relato a verificar"; (d) onde os pesos são configurados, já que mudar um peso reordena semanas passadas, porque o ranking exibido não é gravado.
 
 ## Avaliação, critérios de aceitação e cronograma
 
