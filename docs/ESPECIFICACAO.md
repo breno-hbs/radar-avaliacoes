@@ -109,6 +109,15 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - Risco aceito: se a avaliação não for reenviada, ela se perde, inclusive uma avaliação crítica. Isso faz parte da decisão em aberto sobre reprocessamento.
 - Respostas: 201 quando a avaliação é gravada, com `avaliacao_id`, `criada` verdadeiro e `alerta_id` (nulo quando a avaliação não gerou alerta). Isso inclui a avaliação gravada como `invalida`, que recebe 201 com `alerta_id` nulo e não deve ser tratada como erro nem reenviada. 200 com `avaliacao_id` e `criada` falso quando o `id_externo` já existe (duplicata). 401 sem chave, com chave errada ou com `RADAR_API_KEY` não configurada (ausente ou vazia, o que recusa toda requisição), conferida antes de ler o corpo. 422 para corpo que não é JSON ou objeto, campo ausente ou de tipo errado, `id_externo` vazio e `recebida_em` ilegível, sem fuso ou fora do intervalo. 500 genérico, sem detalhe, para erro permanente da API, falha inesperada, `RADAR_DB` ausente ou chave da Anthropic ausente.
 
+**Decisão tomada (31/10/2026), Fase 2:** simulador de avaliações (`scripts/simulador.py`). Regras:
+
+- Envia as 85 avaliações dos arquivos de dados (20 de desenvolvimento, 50 gerais e 15 críticas). O corpo leva só `id_externo`, `texto`, `nota` e `recebida_em`; o gabarito nunca é enviado.
+- Os arquivos não trazem `recebida_em`, então o simulador o gera: semente fixa, 4 semanas consecutivas (segunda 00:00 a segunda 00:00, America/Sao\_Paulo) com 21, 21, 21 e 22 avaliações, dia e horário entre 11:00 e 22:59, com fuso. O mesmo resultado se repete com a mesma semente.
+- Esse volume semanal é uma **hipótese do simulador**: não vem de dado real nem de medição de restaurante algum, e serve só para exercitar o mecanismo (a amostra mínima N = 20 é atingida em todas as semanas).
+- Falhas: 503 e erro de rede reenviam a mesma avaliação (3 tentativas, esperas de 5 s e 15 s); 401 interrompe o envio; 422 e 500 são registrados sem reenvio. Reenviar é seguro, porque a duplicata responde 200.
+- Parâmetros: a semana inicial padrão é a segunda-feira que abre as 4 semanas completas anteriores à semana atual (America/Sao\_Paulo); as avaliações são enviadas em ordem de `recebida_em`, com timeout de 60 s e 2 s de intervalo, e a chave vem de `RADAR_API_KEY`. Erro de transporte que não é de rede (por exemplo, URL com esquema inválido) não é reenviado.
+- `scripts/medir_alertas.py` abre o banco só para leitura e mostra a contagem de alertas por estado e o mínimo, a mediana e o máximo de `enviado_em − criado_em` dos `enviado`. O tempo inclui a classificação, porque `criado_em` é a entrada no endpoint, e inclui o reenvio nos alertas com nova tentativa.
+
 **Decisão tomada (30/10/2026), Fase 2:** cada ação registrada fica ligada às avaliações que serviram de evidência, na tabela `acao_avaliacoes`. O critério: o sistema guarda o que o dono viu quando decidiu. Regras:
 
 - Uma ação tem até três avaliações como evidência, e uma avaliação pode ser evidência de várias ações. O banco garante a integridade referencial com `acoes` e `avaliacoes`.
