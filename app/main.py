@@ -1,4 +1,5 @@
-"""API do Radar de Avaliações. POST /avaliacoes (bloco 2.2) e alerta crítico via Telegram (bloco 2.3).
+"""API do Radar de Avaliações. POST /avaliacoes (bloco 2.2), alerta crítico via Telegram (bloco 2.3)
+e token do painel (bloco 2.5: dependência exigir_token, Referrer-Policy e filtro do log de acesso).
 
 Fonte da verdade: docs/ESPECIFICACAO.md. Servidor: uvicorn app.main:app
 
@@ -18,15 +19,22 @@ from functools import lru_cache
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, StrictInt, StrictStr, field_validator
 
-from app import alertas, banco, classificador, telegram
+from app import alertas, banco, classificador, telegram, tokens
 from app.classificador import ErroPermanenteDaAPI, ErroTecnicoEsgotado
 
 VERSAO_PROMPT = "v1"  # prompt congelado (prompts/classificador/v1.md)
 
 logger = logging.getLogger("radar.api")
+
+# O token do painel vai no caminho e o uvicorn registra o caminho no log de acesso: mascarado aqui.
+# Instalado na importação do app, que o uvicorn faz depois de configurar o próprio logging.
+tokens.instalar_filtro_de_log()
+
+LINK_INVALIDO = "link inválido ou expirado"
 
 
 class ErroDeConfiguracao(Exception):
@@ -137,6 +145,27 @@ def obter_relogio():
     return _agora_utc
 
 
+def exigir_token(token: str, relogio=Depends(obter_relogio)) -> str:
+    """Dependência para rotas com {token} no caminho.
+
+    Inexistente, expirado, revogado ou malformado: todos dão o mesmo 404, sem revelar o motivo.
+    """
+    if not tokens.formato_valido(token):
+        raise HTTPException(status_code=404, detail=LINK_INVALIDO)
+    try:
+        caminho = os.environ.get("RADAR_DB")
+        if not caminho:
+            raise ErroDeConfiguracao("RADAR_DB não definida")
+        with closing(banco.abrir(caminho)) as conn:
+            valido = tokens.validar_token(conn, token, relogio())
+    except Exception as e:  # noqa: BLE001 - configuração ou banco: 500 genérico, só o tipo no log
+        logger.error("falha ao validar o link do painel (%s)", type(e).__name__)
+        raise HTTPException(status_code=500, detail="falha interna") from None
+    if not valido:
+        raise HTTPException(status_code=404, detail=LINK_INVALIDO)
+    return token
+
+
 def _processar(nova: NovaAvaliacao, resposta: Response, classificar, entrada, agendar_alerta):
     caminho = os.environ.get("RADAR_DB")
     if not caminho:
@@ -179,6 +208,21 @@ def criar_app() -> FastAPI:
     # Sem /docs, /redoc e /openapi.json: a documentação automática não precisa ficar aberta sem chave.
     app = FastAPI(title="Radar de Avaliações", docs_url=None, redoc_url=None, openapi_url=None)
     com_chave = APIRouter(route_class=RotaComChave)
+
+    @app.middleware("http")
+    async def sem_referer(request: Request, chamar_proxima):
+        # O token do painel vai na URL: sem Referer, ele não vaza para links externos.
+        resposta = await chamar_proxima(request)
+        resposta.headers["Referrer-Policy"] = "no-referrer"
+        return resposta
+
+    @app.exception_handler(Exception)
+    async def falha_inesperada(request: Request, erro: Exception):
+        # Roda no ServerErrorMiddleware, por fora do middleware acima: o cabeçalho vai aqui também.
+        logger.error("falha inesperada (%s)", type(erro).__name__)
+        return JSONResponse(
+            status_code=500, content={"detail": "falha interna"}, headers={"Referrer-Policy": "no-referrer"}
+        )
 
     @com_chave.post("/avaliacoes", status_code=201)
     def receber_avaliacao(
