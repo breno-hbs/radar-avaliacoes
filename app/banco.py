@@ -265,6 +265,36 @@ def buscar_avaliacao_por_id_externo(conn, id_externo: str) -> Optional[sqlite3.R
     ).fetchone()
 
 
+def reprocessar_avaliacao(
+    conn, avaliacao_id: int, *, categorias: list, criticidade: list, alerta_criado_em: str
+) -> Optional[int]:
+    """Bloco 2.9: uma avaliação `invalida` reclassificada com sucesso vira `ok`.
+
+    Numa única transação: atualiza `status_classificacao`, `categorias` e `criticidade` e, se houver
+    marcação crítica, cria o alerta `pendente` com `tardio` = 1 (fora do critério 5) e `criado_em` igual
+    ao instante em que o script o grava. Se algo falhar no meio, nada fica. Devolve o alerta_id ou None.
+    """
+    categorias = _validar_lista(categorias, CATEGORIAS, "categorias")
+    criticidade = _validar_lista(criticidade, CRITICIDADES, "criticidade")
+    criado = _utc(alerta_criado_em, "alerta_criado_em").isoformat()
+    with _transacao(conn):
+        cur = conn.execute(
+            "UPDATE avaliacoes SET status_classificacao = 'ok', categorias = ?, criticidade = ? "
+            "WHERE id = ? AND status_classificacao = 'invalida'",
+            (json.dumps(categorias, ensure_ascii=False), json.dumps(criticidade, ensure_ascii=False), avaliacao_id),
+        )
+        if cur.rowcount != 1:
+            raise LookupError(f"avaliação invalida inexistente: {avaliacao_id}")
+        if not criticidade:
+            return None
+        cur = conn.execute(
+            "INSERT INTO alertas (avaliacao_id, tipos, estado, tentativas, criado_em, tardio) "
+            "VALUES (?, ?, 'pendente', 0, ?, 1)",
+            (avaliacao_id, json.dumps(criticidade, ensure_ascii=False), criado),
+        )
+        return cur.lastrowid
+
+
 def buscar_alerta_por_avaliacao(conn, avaliacao_id: int) -> Optional[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM alertas WHERE avaliacao_id = ?", (avaliacao_id,)

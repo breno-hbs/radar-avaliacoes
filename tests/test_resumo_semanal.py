@@ -175,6 +175,7 @@ def test_forma_da_resposta(cliente, ambiente):
     assert set(corpo) == {
         "periodo", "total", "negativas", "invalidas", "cards", "outros_temas", "temas_sem_acao",
         "criticos", "acoes_pendentes", "cobertura", "enviar", "mensagem", "link_painel",
+        "invalidas_a_verificar", "alertas_falhos",  # bloco 2.9
     }
     assert corpo["periodo"] == {
         "inicio": "2026-10-26T00:00:00-03:00", "fim_exclusivo": "2026-11-02T00:00:00-03:00",
@@ -278,7 +279,7 @@ def test_enviar_em_volume_pequeno_sem_nada_com_aviso_curto(cliente, ambiente):
     _varias(ambiente, 19)
     corpo = _get(cliente).json()
     assert corpo["cards"] == [] and corpo["criticos"] == [] and corpo["acoes_pendentes"] == []
-    assert corpo["enviar"] is True and corpo["link_painel"]
+    assert corpo["enviar"] is True and corpo["link_painel"] is None  # aviso curto: sem link (bloco 2.9)
     assert "volume pequeno" in corpo["mensagem"].lower()
     assert "19 avaliações lidas" in corpo["mensagem"]
 
@@ -293,7 +294,7 @@ def test_nao_enviar_em_volume_normal_sem_nada(cliente, ambiente):
 
 def test_semana_com_0_avaliacoes_envia_aviso_curto(cliente, ambiente):
     corpo = _get(cliente).json()
-    assert corpo["total"] == 0 and corpo["enviar"] is True and corpo["link_painel"]
+    assert corpo["total"] == 0 and corpo["enviar"] is True and corpo["link_painel"] is None  # bloco 2.9
     assert "0 avaliações lidas" in corpo["mensagem"]
 
 
@@ -318,7 +319,7 @@ def test_criticos_com_cada_estado_de_alerta_e_sem_alerta(cliente, ambiente):
         "c-falhou": (["cobranca_indevida"], "falhou"),
         "c-sem-alerta": (["saude"], None),
     }
-    assert all(set(c) == {"id_externo", "tipos", "estado_alerta"} for c in corpo["criticos"])
+    assert all(set(c) == {"id_externo", "tipos", "estado_alerta", "reconhecido"} for c in corpo["criticos"])  # 2.9
     assert "texto que nunca vai no resumo" not in json.dumps(corpo, ensure_ascii=False)
     assert pendente.alerta_id
 
@@ -431,6 +432,7 @@ def test_id_externo_com_quebra_de_linha_nao_cria_linha_falsa(cliente, ambiente):
 # ---------- token ----------
 
 def test_link_no_formato_certo_e_validavel(cliente, ambiente, relogio):
+    _grava(ambiente, SEGUNDA + timedelta(days=1), categorias=["atraso"])  # motivo para enviar com link (bloco 2.9)
     corpo = _get(cliente).json()
     token = _token_do_link(corpo["link_painel"])
     assert re.fullmatch(r"[A-Za-z0-9_-]{43}", token)
@@ -440,6 +442,7 @@ def test_link_no_formato_certo_e_validavel(cliente, ambiente, relogio):
 
 
 def test_so_o_hash_fica_no_banco(cliente, ambiente):
+    _grava(ambiente, SEGUNDA + timedelta(days=1), categorias=["atraso"])  # motivo para enviar com link (bloco 2.9)
     token = _token_do_link(_get(cliente).json()["link_painel"])
     linhas = _linhas(ambiente, "tokens_painel")
     assert len(linhas) == 1
@@ -449,6 +452,7 @@ def test_so_o_hash_fica_no_banco(cliente, ambiente):
 
 
 def test_dois_resumos_geram_dois_tokens(cliente, ambiente):
+    _grava(ambiente, SEGUNDA + timedelta(days=1), categorias=["atraso"])  # motivo para enviar com link (bloco 2.9)
     a = _token_do_link(_get(cliente).json()["link_painel"])
     b = _token_do_link(_get(cliente).json()["link_painel"])
     assert a != b
@@ -456,6 +460,7 @@ def test_dois_resumos_geram_dois_tokens(cliente, ambiente):
 
 
 def test_token_criado_com_o_relogio_injetado(cliente, ambiente, relogio):
+    _grava(ambiente, SEGUNDA + timedelta(days=1), categorias=["atraso"])  # motivo para enviar com link (bloco 2.9)
     _get(cliente)
     criado = _linhas(ambiente, "tokens_painel")[0]["criado_em"]
     assert criado == relogio.instante.astimezone(timezone.utc).isoformat()
@@ -475,6 +480,7 @@ def test_radar_url_base_ausente_ou_invalida_da_500_e_nenhum_token(cliente, ambie
 
 
 def test_radar_url_base_com_caminho_e_http_e_aceita(cliente, ambiente, monkeypatch):
+    _grava(ambiente, SEGUNDA + timedelta(days=1), categorias=["atraso"])  # motivo para enviar com link (bloco 2.9)
     monkeypatch.setenv("RADAR_URL_BASE", "http://127.0.0.1:8000/radar")
     assert _get(cliente).json()["link_painel"].startswith("http://127.0.0.1:8000/radar/painel/")
 
@@ -515,6 +521,7 @@ def test_configuracao_vem_da_dependencia(app, ambiente):
 def test_token_e_chave_nao_aparecem_nos_logs(cliente, ambiente, caplog):
     caplog.set_level(logging.DEBUG)
     _varias(ambiente, 3)
+    _grava(ambiente, SEGUNDA + timedelta(days=1), categorias=["atraso"])  # motivo para enviar com link (bloco 2.9)
     token = _token_do_link(_get(cliente).json()["link_painel"])
     texto = "\n".join(r.getMessage() for r in caplog.records)
     assert token not in texto
@@ -622,6 +629,7 @@ def test_semana_nos_extremos_ou_com_digitos_unicode_da_422(cliente, semana):
 
 def test_falha_ao_montar_nao_deixa_token_no_banco(cliente, ambiente, monkeypatch):
     _varias(ambiente, 3)
+    _grava(ambiente, SEGUNDA + timedelta(days=1), categorias=["atraso"])  # motivo para enviar com link (bloco 2.9)
     original = resumo.montar
     chamadas = []
 
@@ -637,6 +645,7 @@ def test_falha_ao_montar_nao_deixa_token_no_banco(cliente, ambiente, monkeypatch
 
 
 def test_relogio_e_lido_uma_vez(app, ambiente):
+    _grava(ambiente, SEGUNDA + timedelta(days=1), categorias=["atraso"])  # motivo para enviar com link (bloco 2.9)
     vezes = []
 
     def relogio():
@@ -650,7 +659,8 @@ def test_relogio_e_lido_uma_vez(app, ambiente):
 
 
 def test_leituras_numa_transacao_so(cliente, ambiente, monkeypatch):
-    """As 4 leituras rodam sob o mesmo BEGIN; o COMMIT vem antes do token."""
+    """As leituras rodam sob o mesmo BEGIN; o COMMIT vem antes do token."""
+    _grava(ambiente, SEGUNDA + timedelta(days=1), categorias=["atraso"])  # motivo para enviar com link (bloco 2.9)
     comandos = []
     abrir = banco.abrir
 
@@ -664,7 +674,7 @@ def test_leituras_numa_transacao_so(cliente, ambiente, monkeypatch):
     selects = [i for i, c in enumerate(comandos) if c == "SELECT"]
     begin = comandos.index("BEGIN")
     commit = comandos.index("COMMIT")
-    assert begin < selects[0] and selects[3] < commit
+    assert begin < selects[0] and selects[-1] < commit  # todas as leituras, inclusive as do bloco 2.9
     assert comandos.index("INSERT") > commit
 
 
