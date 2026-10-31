@@ -51,8 +51,9 @@ def criar_token_painel(conn, escopo: str = ESCOPO_PADRAO, *, agora: datetime) ->
     return token
 
 
-def validar_token(conn, token, agora: datetime) -> bool:
-    """Válido se existe pelo hash, não foi revogado e agora < expira_em (no vencimento já é inválido).
+def validar_token(conn, token, agora: datetime, escopo: str = ESCOPO_PADRAO) -> bool:
+    """Válido se existe pelo hash, tem o escopo esperado, não foi revogado e agora < expira_em
+    (no vencimento já é inválido). Escopo diferente dá o mesmo resultado que token inexistente.
 
     Um token fora do formato é recusado antes de qualquer consulta. A busca usa o hash (índice único).
     """
@@ -60,11 +61,14 @@ def validar_token(conn, token, agora: datetime) -> bool:
     if not formato_valido(token):
         return False
     linha = conn.execute(
-        "SELECT expira_em, revogado_em FROM tokens_painel WHERE token_hash = ?", (hash_do_token(token),)
+        "SELECT escopo, expira_em, revogado_em FROM tokens_painel WHERE token_hash = ?",
+        (hash_do_token(token),),
     ).fetchone()
     if linha is None:
         return False
-    expira_em, revogado_em = linha
+    escopo_gravado, expira_em, revogado_em = linha
+    if escopo_gravado != escopo:
+        return False
     if revogado_em is not None:
         return False
     return instante < _utc(datetime.fromisoformat(expira_em))

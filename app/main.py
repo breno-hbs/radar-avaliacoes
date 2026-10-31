@@ -157,7 +157,7 @@ def exigir_token(token: str, relogio=Depends(obter_relogio)) -> str:
         if not caminho:
             raise ErroDeConfiguracao("RADAR_DB não definida")
         with closing(banco.abrir(caminho)) as conn:
-            valido = tokens.validar_token(conn, token, relogio())
+            valido = tokens.validar_token(conn, token, relogio(), escopo="painel")
     except Exception as e:  # noqa: BLE001 - configuração ou banco: 500 genérico, só o tipo no log
         logger.error("falha ao validar o link do painel (%s)", type(e).__name__)
         raise HTTPException(status_code=500, detail="falha interna") from None

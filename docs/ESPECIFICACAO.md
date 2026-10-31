@@ -70,6 +70,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 - O token é válido se o hash existe, `revogado_em` é nulo e o instante atual é menor que `expira_em`. No instante exato de `expira_em` o link já é inválido. Um token fora do formato `^[A-Za-z0-9_-]{43}$` é recusado antes de consultar o banco, e a busca é sempre pelo hash.
 - Token inexistente, expirado, revogado ou malformado: todas as rotas com `{token}` respondem 404 com o mesmo corpo genérico, "link inválido ou expirado". A resposta não revela o motivo.
+- A validação confere o escopo esperado (`painel` nas rotas do painel). Um token de outro escopo responde o mesmo 404.
 - O log de acesso do uvicorn registra o caminho completo. Um filtro de log troca o trecho do token por `***` em `/painel/<token>` e `/api/painel/<token>/...`, no log de acesso e nos loggers do app. Se o filtro deixar de valer com outra configuração de log, a alternativa é rodar o uvicorn com `--no-access-log`.
 
 **Tabelas (SQLite):**

@@ -472,7 +472,8 @@ def test_uvicorn_real_nao_escreve_o_token_no_log_de_acesso(tmp_path):
             for _ in range(100):
                 try:
                     urllib.request.urlopen(f"{base}/pronto", timeout=1)
-                except urllib.error.HTTPError:
+                except urllib.error.HTTPError as erro_http:
+                    erro_http.close()  # o HTTPError guarda o socket da resposta
                     break  # respondeu (404): está no ar
                 except OSError:
                     time.sleep(0.1)
@@ -481,6 +482,7 @@ def test_uvicorn_real_nao_escreve_o_token_no_log_de_acesso(tmp_path):
             for caminho in (f"/painel/{TOKEN_FALSO}", f"/api/painel/{TOKEN_FALSO}/cards?x=1"):
                 with pytest.raises(urllib.error.HTTPError) as erro:
                     urllib.request.urlopen(base + caminho, timeout=5)
+                erro.value.close()
                 assert erro.value.headers.get("referrer-policy") == "no-referrer"
         finally:
             processo.terminate()
@@ -490,3 +492,38 @@ def test_uvicorn_real_nao_escreve_o_token_no_log_de_acesso(tmp_path):
     assert "GET /painel/*** HTTP/1.1" in log
     assert "GET /api/painel/***/cards?x=1 HTTP/1.1" in log
     assert TOKEN_FALSO not in log
+
+
+# ---------- escopo ----------
+
+def test_validar_token_confere_o_escopo(conn):
+    painel = tokens.criar_token_painel(conn, agora=T0)
+    outro = tokens.criar_token_painel(conn, "outro", agora=T0)
+    assert tokens.validar_token(conn, painel, T0) is True
+    assert tokens.validar_token(conn, painel, T0, escopo="painel") is True
+    assert tokens.validar_token(conn, outro, T0) is False
+    assert tokens.validar_token(conn, outro, T0, escopo="outro") is True
+    assert tokens.validar_token(conn, painel, T0, escopo="outro") is False
+
+
+def test_escopo_tambem_vale_depois_da_validade_e_da_revogacao(conn):
+    outro = tokens.criar_token_painel(conn, "outro", agora=T0)
+    assert tokens.validar_token(conn, outro, T0 + timedelta(days=8), escopo="outro") is False  # expirado
+    tokens.revogar_token(conn, outro, T0)
+    assert tokens.validar_token(conn, outro, T0 + timedelta(seconds=1), escopo="outro") is False  # revogado
+    # escopo errado continua recusado em qualquer estado
+    assert tokens.validar_token(conn, outro, T0 + timedelta(days=8)) is False
+    assert tokens.validar_token(conn, outro, T0 + timedelta(seconds=1)) is False
+
+
+def test_escopo_fora_do_esperado_da_o_mesmo_404_que_inexistente(cenario, caminho):
+    cliente, _, token, _ = cenario
+    with closing(banco.abrir(caminho)) as c:
+        outro = tokens.criar_token_painel(c, "outro", agora=T0)
+    r_outro = cliente.get(f"/api/painel/{outro}/teste")
+    r_inexistente = cliente.get(f"/api/painel/{TOKEN_FALSO}/teste")
+    assert r_outro.status_code == 404 and r_outro.json() == CORPO_404
+    assert r_outro.content == r_inexistente.content
+    assert {k: v for k, v in r_outro.headers.items() if k != "content-length"} == \
+        {k: v for k, v in r_inexistente.headers.items() if k != "content-length"}
+    assert cliente.get(f"/api/painel/{token}/teste").status_code == 200  # escopo "painel" segue válido
