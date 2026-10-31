@@ -85,6 +85,7 @@ def test_tabelas_existem_com_as_colunas_da_especificacao(conn):
     }
     assert _colunas(conn, "alertas") == {
         "id", "avaliacao_id", "tipos", "estado", "tentativas", "criado_em", "enviado_em",
+        "tardio", "reconhecido_em",  # bloco 2.8 (decisão de 31/10/2026 sobre a recuperação de alertas)
     }
     assert _colunas(conn, "acoes") == {
         "id", "categoria", "semana_inicio", "estado", "criada_em", "concluida_em", "nota",

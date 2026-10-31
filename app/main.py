@@ -1,6 +1,7 @@
 """API do Radar de Avaliações. POST /avaliacoes (bloco 2.2), alerta crítico via Telegram (bloco 2.3),
 token do painel (bloco 2.5: dependência exigir_token, Referrer-Policy e filtro do log de acesso) e
-GET /resumo-semanal (bloco 2.7).
+GET /resumo-semanal (bloco 2.7) e recuperação de alertas (bloco 2.8: POST /alertas/reenviar e
+reenvio dos pendentes na subida do servidor).
 
 Fonte da verdade: docs/ESPECIFICACAO.md. Servidor: uvicorn app.main:app --env-file .env
 
@@ -16,7 +17,8 @@ import hmac
 import logging
 import os
 import re
-from contextlib import closing
+import threading
+from contextlib import asynccontextmanager, closing
 from datetime import date, datetime, time, timedelta, timezone
 from functools import lru_cache
 from typing import Optional
@@ -287,9 +289,54 @@ def _processar(nova: NovaAvaliacao, resposta: Response, classificar, entrada, ag
     return {"avaliacao_id": gravado.avaliacao_id, "criada": True, "alerta_id": gravado.alerta_id}
 
 
-def criar_app() -> FastAPI:
+def _caminho_do_banco_existente() -> str:
+    """RADAR_DB definida e apontando para um arquivo que existe (banco.abrir criaria um banco vazio)."""
+    caminho = os.environ.get("RADAR_DB")
+    if not caminho:
+        raise ErroDeConfiguracao("RADAR_DB não definida")
+    if not os.path.isfile(caminho):
+        raise ErroDeConfiguracao("RADAR_DB aponta para um arquivo que não existe")
+    return caminho
+
+
+def _recuperar_na_subida_padrao() -> None:
+    """Recuperação de alertas da subida do servidor de produção. Nunca levanta exceção (só registra)."""
+    try:
+        caminho = _caminho_do_banco_existente()
+    except ErroDeConfiguracao as e:
+        logger.warning("recuperação de alertas na subida não rodou: %s", e)
+        return
+    alertas.recuperar_na_subida(caminho, telegram.notificador_do_ambiente(), _agora_utc)
+
+
+def _rodar_recuperacao(funcao) -> None:
+    try:
+        funcao()
+    except Exception as e:  # noqa: BLE001 - a recuperação não pode derrubar a subida
+        logger.error("falha na recuperação de alertas na subida do servidor (%s)", type(e).__name__)
+
+
+def criar_app(*, recuperar_na_subida=None) -> FastAPI:
+    """Monta o app. `recuperar_na_subida` (função sem argumentos) roda em segundo plano na subida.
+
+    Sem ela, nada é reenviado na subida: os testes criam o app assim. O `app` do módulo, que o uvicorn
+    serve, liga a recuperação de produção.
+    """
+
+    @asynccontextmanager
+    async def ciclo_de_vida(app_):
+        if recuperar_na_subida is not None:
+            # Em thread própria: a subida não espera a recuperação nem cai se ela falhar.
+            threading.Thread(
+                target=_rodar_recuperacao, args=(recuperar_na_subida,), name="recuperacao-alertas", daemon=True
+            ).start()
+        yield
+
     # Sem /docs, /redoc e /openapi.json: a documentação automática não precisa ficar aberta sem chave.
-    app = FastAPI(title="Radar de Avaliações", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(
+        title="Radar de Avaliações", docs_url=None, redoc_url=None, openapi_url=None, lifespan=ciclo_de_vida
+    )
+    app.state.recuperar_na_subida = recuperar_na_subida
     com_chave = APIRouter(route_class=RotaComChave)
 
     @app.middleware("http")
@@ -334,6 +381,13 @@ def criar_app() -> FastAPI:
         resposta.headers["Cache-Control"] = "no-store"
         return _resumo_semanal(semana_param, relogio, config)
 
+    @com_chave.post("/alertas/reenviar")
+    def reenviar_alertas(notificador=Depends(obter_notificador), relogio=Depends(obter_relogio)):
+        # Varre e tenta uma vez cada alerta pendente ou falhou elegível; ver app/alertas.py.
+        return alertas.reenviar_elegiveis(
+            _caminho_do_banco_existente(), notificador, relogio, estados=alertas.ESTADOS_REENVIO
+        )
+
     @com_chave.post("/avaliacoes", status_code=201)
     def receber_avaliacao(
         nova: NovaAvaliacao,
@@ -376,4 +430,4 @@ def criar_app() -> FastAPI:
     return app
 
 
-app = criar_app()
+app = criar_app(recuperar_na_subida=_recuperar_na_subida_padrao)

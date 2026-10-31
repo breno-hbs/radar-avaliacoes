@@ -169,3 +169,48 @@ def test_data_malformada_da_erro_curto(caminho, capsys):
 def test_cabecalho_avisa_que_nova_tentativa_entra_no_tempo(banco_com_alertas, capsys):
     medir_alertas.main(["--banco", str(banco_com_alertas)])
     assert "nova tentativa" in capsys.readouterr().out.lower()
+
+
+# ---------- bloco 2.8: tardio ----------
+
+def test_mede_so_os_enviados_com_tardio_0_e_conta_os_tardios(caminho, capsys):
+    with closing(banco.abrir(caminho)) as conn:
+        _grava(conn, 1, "2026-10-26T15:00:00+00:00", "enviado", "2026-10-26T15:00:04+00:00", 1)
+        _grava(conn, 2, "2026-10-26T15:10:00+00:00", "enviado", "2026-10-26T18:10:00+00:00", 3)
+        _grava(conn, 3, "2026-10-26T15:20:00+00:00", "falhou", None, 3)
+        conn.execute("UPDATE alertas SET tardio = 1 WHERE id IN (2, 3)")
+    r = medir_alertas.medir(caminho)
+    assert r["tempos"]["n"] == 1
+    assert r["tempos"]["maximo"] == pytest.approx(4.0)  # o tardio de 3 h fica fora
+    assert r["tardios"] == 2
+    assert r["estados"] == {"pendente": 0, "enviado": 2, "falhou": 1}
+    medir_alertas.main(["--banco", str(caminho)])
+    saida = capsys.readouterr().out
+    assert "Alertas tardios (reenvio ou reprocessamento): 2" in saida
+
+
+def _banco_antigo(caminho):
+    import sqlite3
+
+    with closing(sqlite3.connect(caminho)) as conn:
+        conn.executescript(
+            "CREATE TABLE alertas (id INTEGER PRIMARY KEY, avaliacao_id INTEGER, tipos TEXT, estado TEXT, "
+            "tentativas INTEGER, criado_em TEXT, enviado_em TEXT);"
+            "INSERT INTO alertas VALUES (1, 1, '[]', 'enviado', 1, '2026-10-26T15:00:00+00:00', "
+            "'2026-10-26T15:00:06+00:00');"
+            "INSERT INTO alertas VALUES (2, 2, '[]', 'enviado', 2, '2026-10-26T15:00:00+00:00', "
+            "'2026-10-26T15:00:10+00:00');"
+        )
+        conn.commit()
+
+
+def test_banco_sem_a_coluna_tardio_conta_todos_como_0_e_avisa_uma_vez(tmp_path, capsys):
+    antigo = tmp_path / "antigo.db"
+    _banco_antigo(antigo)
+    antes = _sha(antigo)
+    assert medir_alertas.main(["--banco", str(antigo)]) == 0
+    saida = capsys.readouterr().out
+    assert saida.lower().count("sem a coluna tardio") == 1
+    r = medir_alertas.medir(antigo)
+    assert r["tempos"]["n"] == 2 and r["tardios"] == 0
+    assert _sha(antigo) == antes  # somente leitura: a migração não roda aqui
