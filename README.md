@@ -86,6 +86,8 @@ As variáveis ficam no `.env`, que não vai para o Git: `RADAR_API_KEY`, `RADAR_
 uvicorn app.main:app --env-file .env
 ```
 
+A v1 roda com **um processo**: o uvicorn sem `--workers`, que é o padrão. O SQLite aceita um escritor por vez, e a trava que evita o envio duplicado de alerta vale dentro do processo. Com `--workers N`, uma mensagem de alerta pode sair duplicada num restart. É uma limitação conhecida; a alternativa futura é um estado "em envio" no esquema.
+
 `GET /resumo-semanal` (com `X-API-Key`) devolve o resumo da última semana completa, ou da semana de `?semana=AAAA-MM-DD`. Cada chamada com algo a enviar cria um link novo do painel.
 
 ## Limitações
