@@ -223,3 +223,9 @@ __marimo__/
 # avaliacao/resultados/ continua rastreado (relatório e diário da avaliação concluída).
 avaliacao/resultados/v1.lock
 avaliacao/abortadas/
+
+# Banco SQLite local (caminho em RADAR_DB): nunca vai para o Git
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
