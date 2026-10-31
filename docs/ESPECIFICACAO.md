@@ -53,7 +53,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | --- | --- | --- | --- |
 | `POST /avaliacoes` | Simulador | Cabeçalho `X-API-Key` | Recebe `id_externo`, `texto`, `nota`, `recebida_em` (com fuso). Valida, ignora duplicata, classifica e, se houver marcação crítica, cria um único alerta com todos os tipos identificados |
 | `GET /resumo-semanal` | n8n | `X-API-Key` | Devolve período, total, negativas, 3 principais problemas, críticos (com o estado do alerta de cada um), as avaliações `invalida` da semana a verificar manualmente, ações pendentes e o link do painel |
-| `POST /alertas/reenviar` | n8n | Cabeçalho `X-API-Key` | Tenta uma vez cada alerta `pendente` ou `falhou` com menos de 5 tentativas no total e devolve quantos foram enviados e quantos falharam |
+| `POST /alertas/reenviar` | n8n | Cabeçalho `X-API-Key` | Tenta uma vez cada alerta `pendente` ou `falhou` elegível (menos de 5 tentativas e criado há mais de 5 minutos) e devolve 200 com `elegiveis`, `enviados`, `falharam` e `configurado` |
 | `GET /painel/{token}` | Dono (navegador) | Token com validade (tokens\_painel) | Serve a página mobile-first |
 | `GET /api/painel/{token}/cards` | Painel | Token | Cards com problema, evidências e recomendação |
 | `POST /api/painel/{token}/acoes` | Painel | Token | Registra uma ação com `categoria`, `semana_inicio` e de 1 a 3 evidências (só `avaliacao_id` e `posicao`); o servidor confere as evidências e deriva o trecho exibido do texto da avaliação |
@@ -79,7 +79,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | Tabela | Campos principais |
 | --- | --- |
 | `avaliacoes` | `id`, `id_externo` (único), `texto`, `nota`, `recebida_em`, `prazo_resposta` (= recebida\_em + 5 dias), `categorias`, `criticidade`, `status_classificacao` |
-| `alertas` | `id`, `avaliacao_id`, `tipos`, `estado`, `tentativas`, `criado_em`, `enviado_em`; único por `avaliacao_id`. `tipos` é a lista de todas as marcações críticas da avaliação |
+| `alertas` | `id`, `avaliacao_id`, `tipos`, `estado`, `tentativas`, `criado_em`, `enviado_em`, `tardio` (inteiro 0 ou 1, padrão 0); único por `avaliacao_id`. `tipos` é a lista de todas as marcações críticas da avaliação |
 | `acoes` | `id`, `categoria`, `semana_inicio`, `estado`, `criada_em`, `concluida_em`, `nota` |
 | `acao_avaliacoes` | `acao_id` (referência a `acoes`), `avaliacao_id` (referência a `avaliacoes`), `trecho_exibido`, `posicao` (de 1 a 3); chave primária (`acao_id`, `avaliacao_id`) e único por (`acao_id`, `posicao`) |
 | tokens\_painel | id, token\_hash (único, SHA-256), escopo, criado\_em, expira\_em (= criado\_em + 7 dias), revogado\_em |
@@ -93,25 +93,29 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 **Decisão tomada (31/10/2026):** envio do alerta crítico ao Telegram. Regras:
 
 - O `POST /avaliacoes` grava a avaliação e o alerta `pendente`, responde normalmente e envia a mensagem em tarefa de fundo. A resposta e o código HTTP não dependem do Telegram.
-- O `criado_em` do alerta é o instante em que a requisição entrou no endpoint, em UTC. O tempo do critério 5 é `enviado_em − criado_em` do envio inicial, lido da tabela `alertas`; os alertas enviados depois (tardios) ficam fora, conforme a decisão sobre a recuperação de alertas.
+- O `criado_em` do alerta é o instante em que a requisição entrou no endpoint, em UTC. O tempo do critério 5 é `enviado_em − criado_em` dos alertas enviados com `tardio` = 0 (o envio inicial), lido da tabela `alertas`; os alertas tardios ficam fora, conforme a decisão sobre a recuperação de alertas.
 - Se o token ou o chat do Telegram não estiver configurado, nada é enviado: o alerta fica `pendente`, com `tentativas` igual a 0, e um aviso é registrado no log.
 
 **Decisão tomada (31/10/2026), Fase 2:** mensagem do alerta crítico. O critério: um token por alerta multiplicaria as credenciais válidas por 7 dias no histórico do Telegram, e o alerta já traz o relato. Regras:
 
 - A mensagem começa com "(dados simulados)", como o resumo semanal.
 - O alerta não leva o link do painel: o link só vai no resumo semanal.
+- O formato da mensagem é o definido em `app/alertas.py` (`montar_mensagem`). Esta decisão só acrescenta o prefixo "(dados simulados)" e, no reenvio, a linha com o instante de criação do alerta.
 
 **Prioridade:** não perder um alerta crítico. Um alerta `falhou` continua registrado no banco, e o caso também aparece no resumo semanal. Como garantir que um alerta `pendente` ou `falhou` seja entregue está na decisão tomada sobre a recuperação de alertas, abaixo.
 
 **Decisão tomada (31/10/2026), Fase 2:** recuperação de alertas `pendente` e `falhou`. O critério: não perder um alerta crítico sem gerar spam. Regras:
 
-- Ao subir o servidor, o app reenvia, em tarefa de fundo, os alertas em estado `pendente`.
-- Nova rota `POST /alertas/reenviar` (chamada pelo n8n, com `X-API-Key`): tenta uma vez cada alerta `pendente` ou `falhou` com menos de 5 tentativas no total (teto `MAX_TENTATIVAS_TOTAL` = 5, contando as tentativas do envio inicial). Incrementa `tentativas` antes de cada envio, marca `enviado` e `enviado_em` no sucesso e mantém ou volta para `falhou` na falha. Com o Telegram não configurado, nada muda e a rota só registra o aviso.
+- Elegibilidade: antes de cada varredura (na subida do servidor e na rota `POST /alertas/reenviar`), todo alerta `pendente` com `tentativas` igual ou maior que 5 passa para `falhou`, sem envio. Depois disso, só são enviados alertas `pendente` ou `falhou` com `tentativas` menor que 5 (teto `MAX_TENTATIVAS_TOTAL` = 5, contando as tentativas do envio inicial).
+- Ao subir o servidor, o app reenvia, em tarefa de fundo, os alertas `pendente`, pela mesma regra, com o mesmo teto e a mesma janela de 5 minutos do reenvio.
+- Nova rota `POST /alertas/reenviar` (chamada pelo n8n, com `X-API-Key`): tenta uma vez cada alerta elegível. Incrementa `tentativas` antes de cada envio, marca `enviado` e `enviado_em` no sucesso e mantém ou volta para `falhou` na falha. Responde 200 com `{elegiveis, enviados, falharam, configurado}`. Com o Telegram não configurado, nada muda: `configurado` é falso, os demais valores são zero e a rota só registra o aviso.
 - Se a 5ª tentativa falhar, o alerta fica `falhou`, deixa de ser elegível ao reenvio e continua listado no resumo semanal.
+- O reenvio só considera alertas com `criado_em` há mais de 5 minutos, para não disputar com o envio inicial em andamento.
 - O n8n chama a rota de hora em hora, em um segundo workflow pequeno (Fase 3).
 - A mensagem de um reenvio traz uma linha com o instante de criação do alerta.
-- Um alerta enviado fora do envio inicial (por reenvio ou por reprocessamento) é "tardio" e fica fora da medição do critério 5, que continua medindo só o envio inicial. Isso exige marcar o alerta (campo a definir no bloco 2.8) e atualizar `scripts/medir_alertas.py`.
+- Alerta tardio: a coluna `tardio` (inteiro 0 ou 1, padrão 0) da tabela `alertas` vale 1 desde o instante em que um reenvio ou o reprocessamento começa a agir sobre o alerta, mesmo que a tentativa falhe. O envio inicial nunca a altera, e os alertas criados pelo reprocessamento já nascem com `tardio` = 1. O critério 5 e `scripts/medir_alertas.py` medem só os alertas `enviado` com `tardio` = 0. Um banco criado antes da coluna a recebe ao ser aberto (migração simples, sem perder dados). A implementação e a atualização do script são do bloco 2.8.
 - Vale o limite da unicidade acima: um reenvio pode duplicar uma mensagem que foi entregue sem confirmação.
+- Limitação registrada: com o Telegram fora por cerca de 3 horas ou mais (2 tentativas do envio inicial mais 3 reenvios horários), o alerta chega a 5 tentativas, fica `falhou` e aparece no resumo semanal. É o risco aceito do teto contra spam.
 
 **Decisão tomada (31/10/2026), Fase 2:** a coluna `confianca` é substituída por `status_classificacao`, com os valores `ok` e `invalida`. O critério: o classificador congelado da v1 devolve só `categorias` e `criticidade`, sem nenhum valor de confiança, e pedir um ao modelo alteraria o prompt e o esquema congelados (seria uma v2, com conjunto novo de avaliação). Regras:
 
@@ -122,8 +126,9 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Decisão tomada (31/10/2026), Fase 2:** reprocessamento das avaliações `invalida`. O critério: sem ruído e sem presumir. Regras:
 
-- Não há reprocessamento automático nem alerta genérico. O reprocessamento é manual, por `scripts/reprocessar_invalidas.py` (a implementar no bloco 2.8): reclassifica cada avaliação `invalida` com a regra de retentativa congelada. No sucesso, atualiza a avaliação para `ok` com `categorias` e `criticidade`; se sair marcação crítica, cria o alerta (tardio, fora do critério 5) no mesmo passo da atualização.
+- Não há reprocessamento automático nem alerta genérico. O reprocessamento é manual, por `scripts/reprocessar_invalidas.py` (a implementar no bloco 2.8): reclassifica cada avaliação `invalida` com a regra de retentativa congelada. No sucesso, atualiza a avaliação para `ok` com `categorias` e `criticidade`; se sair marcação crítica, cria o alerta (já com `tardio` = 1, fora do critério 5) no mesmo passo da atualização. O próprio script envia o alerta logo depois de gravá-lo, pela regra de envio da decisão de recuperação (incrementa `tentativas` antes de cada envio); se o envio falhar, o alerta fica `pendente` e a chamada horária o pega.
 - O resumo semanal lista todas as avaliações `invalida` da semana (`id_externo` e nota, sem texto) como "classificação falhou, verificar manualmente", porque a avaliação `invalida` é gravada sem `criticidade` e o sistema não sabe se ela é crítica. Uma avaliação `invalida` existente na semana conta como algo a decidir para o campo `enviar` do `GET /resumo-semanal`.
+- Limitação registrada: nenhuma rota expõe o texto de uma avaliação `invalida`; o dono confere pelo `id_externo` no app de origem.
 - Limitação registrada: não há alerta imediato para um crítico com saída inválida. Alertar toda `invalida` com nota baixa fica para uma versão futura, porque a especificação ainda não define nota baixa.
 
 **Decisão tomada (31/10/2026), Fase 2:** comportamento do `POST /avaliacoes` diante de falhas do classificador. O critério: nada fica gravado pela metade, e a v1 não tem terceiro estado de classificação nem reprocessamento automático. Regras:
@@ -142,7 +147,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - Falhas: 503 e erro de rede reenviam a mesma avaliação (3 tentativas, esperas de 5 s e 15 s); 401 interrompe o envio; 422 e 500 são registrados sem reenvio. Reenviar é seguro, porque a duplicata responde 200.
 - Parada por falhas seguidas: o simulador para depois de 3 falhas finais seguidas, de qualquer tipo (503 ou rede esgotados, 422, 500 ou código inesperado); um 200 ou 201 zera a contagem. Sai com código 4; o 401 continua parando na hora, com código 3.
 - Parâmetros: a semana inicial padrão é a segunda-feira que abre as 4 semanas completas anteriores à semana atual (America/Sao\_Paulo); as avaliações são enviadas em ordem de `recebida_em`, com timeout de 60 s e 2 s de intervalo, e a chave vem de `RADAR_API_KEY`. Erro de transporte que não é de rede (por exemplo, URL com esquema inválido) não é reenviado.
-- `scripts/medir_alertas.py` abre o banco só para leitura e mostra a contagem de alertas por estado e o mínimo, a mediana e o máximo de `enviado_em − criado_em` dos `enviado`. O tempo inclui a classificação, porque `criado_em` é a entrada no endpoint, e inclui o reenvio nos alertas com nova tentativa do envio inicial. Hoje o script mede todos os `enviado`; a partir do bloco 2.8, os alertas tardios, da decisão sobre a recuperação de alertas, ficam fora da medição.
+- `scripts/medir_alertas.py` abre o banco só para leitura e mostra a contagem de alertas por estado e o mínimo, a mediana e o máximo de `enviado_em − criado_em` dos `enviado`. O tempo inclui a classificação, porque `criado_em` é a entrada no endpoint, e inclui o reenvio nos alertas com nova tentativa do envio inicial. Hoje o script mede todos os `enviado`; a partir do bloco 2.8, mede só os `enviado` com `tardio` = 0, conforme a decisão sobre a recuperação de alertas.
 
 **Decisão tomada (30/10/2026), Fase 2:** cada ação registrada fica ligada às avaliações que serviram de evidência, na tabela `acao_avaliacoes`. O critério: o sistema guarda o que o dono viu quando decidiu. Regras:
 
@@ -160,6 +165,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - O `trecho_exibido` é derivado pelo servidor do texto da avaliação, pela mesma função usada no `GET /api/painel/{token}/cards`: os primeiros 140 caracteres, cortados em limite de palavra, com reticências. O que o dono vê no card é o que fica gravado.
 - O painel renderiza todo texto de avaliação como texto puro (`textContent`), nunca como HTML.
 - Token inválido segue a regra uniforme do 404.
+- Os códigos de erro, a regra contra ação duplicada e a conferência de que a avaliação estava no card ficam para a Fase 4, ao desenhar o painel.
 
 **Decisão tomada (31/10/2026), Fase 2:** esquema de `acao_avaliacoes`, integridade e datas, adotados na camada de persistência (`app/banco.py`). Regras:
 
@@ -265,7 +271,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | 2 | Casos críticos | 15 casos críticos testados, com recall geral e por tipo; falsos alertas contados nos 50 gerais | 1 |
 | 3 | Sem duplicidade | Reenviar a mesma avaliação não gera outra avaliação nem outro alerta | 2 |
 | 4 | Segurança | Endpoint sem chave e link expirado são recusados | 2 |
-| 5 | Alerta imediato | Tempo medido entre a entrada no endpoint e a confirmação do Telegram, só no envio inicial (alertas tardios ficam fora) | 3 |
+| 5 | Alerta imediato | Tempo medido entre a entrada no endpoint e a confirmação do Telegram, só os alertas com `tardio` = 0 (o envio inicial) | 3 |
 | 6 | Resumo semanal | Workflow do n8n executado manualmente, com histórico de execução | 3 |
 | 7 | Painel com persistência e histórico | Registrar ação, reiniciar o servidor e recuperar; consultar semanas anteriores | 4 |
 | 8 | Decisão em 2 minutos | Teste dos 2 minutos, com o procedimento descrito abaixo da tabela | 4 |
