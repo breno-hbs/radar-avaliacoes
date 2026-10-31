@@ -64,7 +64,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - O token é aleatório (secrets.token\_urlsafe(32)) e só o seu hash SHA-256 é guardado na tabela tokens\_painel, com escopo do painel, validade inicial de 7 dias e possibilidade de revogação. A URL não carrega dado sensível. Cada resumo semanal gera um link novo.
 - O token na URL é uma credencial sensível: não aparece em logs, o acesso publicado usa HTTPS e as páginas enviam o cabeçalho `Referrer-Policy: no-referrer` para evitar vazamento pelo cabeçalho Referer.
 - A chave `X-API-Key` e o token do bot ficam em variáveis de ambiente. Nunca entram no código nem no GitHub.
-- Requisição sem chave, ou com link expirado, é recusada.
+- Requisição sem chave, ou com link expirado, é recusada. A chave `X-API-Key` é lida de uma variável de ambiente e comparada em tempo constante; requisição sem chave ou com chave errada recebe 401.
 
 **Tabelas (SQLite):**
 
@@ -95,7 +95,12 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Decisão em aberto (Fase 2):** definir o reprocessamento das avaliações `invalida` (automático ou manual) e como o dono é avisado. Enquanto isso não for decidido, uma avaliação crítica com saída inválida fica sem alerta, o que conflita com a prioridade de não perder um alerta crítico. Alternativas a considerar: alerta genérico "classificação falhou, verificar manualmente", reprocessamento imediato ou aviso no resumo semanal.
 
-**Decisão em aberto (Fase 2):** definir o comportamento do `POST /avaliacoes` diante de falha técnica ou erro permanente da API do classificador: devolver erro para o simulador tentar de novo ou gravar a avaliação como pendente de classificação.
+**Decisão tomada (31/10/2026), Fase 2:** comportamento do `POST /avaliacoes` diante de falhas do classificador. O critério: nada fica gravado pela metade, e a v1 não tem terceiro estado de classificação nem reprocessador. Regras:
+
+- Saída inválida (conteúdo ruim depois da regra de retentativa): a avaliação é gravada como `invalida`, conforme a decisão acima.
+- Falha técnica esgotada (timeout, erro de conexão, 408, 409, 429 ou 5xx depois das 3 chamadas): o endpoint devolve 503 e não grava nada. O simulador reenvia a avaliação depois.
+- Erro permanente da API (400, 401, 403 e outros), que indica problema de configuração: o endpoint devolve 500 e não grava nada. O erro não é repetido.
+- Risco aceito: se a avaliação não for reenviada, ela se perde, inclusive uma avaliação crítica. Isso faz parte da decisão em aberto sobre reprocessamento.
 
 **Decisão tomada (30/10/2026), Fase 2:** cada ação registrada fica ligada às avaliações que serviram de evidência, na tabela `acao_avaliacoes`. O critério: o sistema guarda o que o dono viu quando decidiu. Regras:
 
