@@ -107,10 +107,10 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 - **Pontuação de um problema:** `pontuacao = mencoes × gravidade × fator_tendencia`. A gravidade é um peso fixo por categoria e o fator de tendência multiplica a pontuação quando o problema subiu em relação à semana anterior. Os valores estão na decisão tomada abaixo.
 - **Conteúdo de um card:** o problema em uma linha, a quantidade e o período, até 3 trechos reais como evidência, a recomendação e o botão "registrar ação". O que não entra nos 3 cards fica um toque adiante, em "outros temas".
-- **Linha de cobertura fixa:** total de avaliações lidas, cards, temas monitorados sem ação e avaliações que a IA não soube classificar (baixa confiança).
+- **Linha de cobertura fixa:** total de avaliações lidas, cards, temas monitorados sem ação e avaliações que a IA não soube classificar (baixa confiança). Quando o mínimo de avaliações para comparar a tendência não é atingido, a linha traz "tendência não calculada: amostra pequena".
 - **Sem presumir causa:** o texto diz "o padrão sugere" e recomenda investigar. Entregador nunca gera ação interna.
 - **Alerta crítico:** sai na hora em que a avaliação entra no endpoint, com o texto "relato a verificar", em uma mensagem por avaliação que lista todos os tipos identificados. Os casos críticos também contam no resumo semanal. O alerta pode ser enviado automaticamente ao dono, sempre como relato a verificar. Respostas públicas aos clientes nunca são enviadas automaticamente.
-- **Resumo semanal:** segunda-feira às 8h, no fuso America/Sao\_Paulo. Só é enviado se houver algo a decidir; um indicador "última leitura" no painel mostra que o sistema está vivo.
+- **Resumo semanal:** segunda-feira às 8h, no fuso America/Sao\_Paulo. Só é enviado se houver algo a decidir, exceto em semana de volume pequeno (menos de N avaliações), quando sai ao menos um aviso curto; um indicador "última leitura" no painel mostra que o sistema está vivo.
 - **Medição do efeito:** compara a taxa de menções por 100 avaliações entre semanas, antes e depois de uma ação concluída. É uma comparação simulada e não prova causalidade.
 - **Prazo de resposta:** cada avaliação guarda o prazo de 5 dias do iFood, para a versão futura de respostas em lote ([fonte](https://blog-parceiros.ifood.com.br/avaliacoes-e-moderacoes/)). Na v1, os rascunhos de resposta em lote são opcionais e o primeiro corte se houver atraso.
 
@@ -132,7 +132,15 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - Limitação deliberada: `qualidade_temperatura` reúne problemas de intensidades diferentes e todos recebem o mesmo peso 3. A decisão em aberto sobre dividir a categoria está na seção "Categorias e criticidade".
 - Os casos com marcação crítica seguem o fluxo próprio de alertas, independentemente do ranking semanal.
 
-**Decisão em aberto (Fase 2):** definir o desempate entre pontuações iguais e o comportamento do ranking em semanas com poucas avaliações, incluindo a partir de quantas avaliações a comparação de taxa é considerada confiável. Isso deve ser resolvido antes de implementar o ranking. Definir também: (a) o que é `mencoes` (avaliações ou menções, janela e fuso) e o denominador de "por 100 avaliações"; (b) o que fazer se a taxa da semana anterior for 0, já que hoje qualquer aumento dá 1,25; (c) se uma avaliação crítica conta em `mencoes` e se pode ser evidência de um card, mantendo o "relato a verificar"; (d) onde os pesos são configurados, já que mudar um peso reordena semanas passadas, porque o ranking exibido não é gravado.
+**Decisão tomada (30/10/2026), Fase 2:** complemento do ranking dos cards semanais: desempate, amostra mínima e definições de cálculo. Como na decisão anterior, os valores são hipóteses configuráveis da v1, sem validação com dados reais.
+
+- **Peso e tendência:** com as mesmas menções, o peso de gravidade pesa mais do que a tendência. Uma categoria de peso 2 em alta (2 × 1,25 = 2,5) ainda fica abaixo de uma de peso 3 sem alta (3). É intencional.
+- **Desempate:** quando as pontuações são iguais, ordena-se por maior peso de gravidade, depois por mais menções e, por último, pelo identificador da categoria em ordem alfabética. Os mesmos dados produzem sempre a mesma ordem.
+- **Amostra mínima:** o fator de tendência só é calculado se as duas semanas comparadas têm pelo menos N = 20 avaliações. Caso contrário, vale 1,0. Os cards continuam sendo calculados por menções × gravidade, apenas sem o bônus de tendência. Se a semana anterior tem amostra suficiente e taxa 0, um aumento real vale 1,25.
+- **Resumo com volume pequeno:** a semana com menos de N avaliações ainda gera resumo. Se houver cards, o resumo sai normalmente. Se não houver nenhum, sai um aviso curto com o total de avaliações lidas, para que o silêncio não seja confundido com sistema parado. A linha de cobertura traz "tendência não calculada: amostra pequena" quando o mínimo não é atingido em alguma das duas semanas.
+- **`mencoes`:** número de avaliações da semana que têm a categoria; uma avaliação conta uma vez por categoria. A semana vai de segunda-feira 00:00 a domingo 23:59, no fuso America/Sao\_Paulo, pelo campo `recebida_em`. O denominador de "por 100 avaliações" é o total de avaliações recebidas na semana, inclusive as positivas, as sem categoria e as de baixa confiança.
+- **Avaliações críticas:** contam em `mencoes` das suas categorias operacionais e podem ser evidência de um card, mantendo o rótulo "relato a verificar". O alerta crítico segue o fluxo próprio.
+- **Configuração:** pesos, fator de tendência e N ficam em um arquivo de configuração versionado no código. O ranking exibido não é gravado, então mudar um valor muda o ranking calculado de semanas passadas. O sistema só garante reproduzir o que o dono viu para as ações registradas (`acao_avaliacoes`).
 
 ## Avaliação, critérios de aceitação e cronograma
 
