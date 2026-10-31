@@ -105,7 +105,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **O dono vê no máximo 3 cards por semana, ordenados por impacto, e decide tudo em menos de 2 minutos.**
 
-- **Pontuação de um problema:** menções × gravidade × tendência. A gravidade é um peso fixo por categoria, definido na Fase 2 e documentado. A tendência soma ponto quando o problema subiu em relação à semana anterior.
+- **Pontuação de um problema:** `pontuacao = mencoes × gravidade × fator_tendencia`. A gravidade é um peso fixo por categoria e o fator de tendência multiplica a pontuação quando o problema subiu em relação à semana anterior. Os valores estão na decisão tomada abaixo.
 - **Conteúdo de um card:** o problema em uma linha, a quantidade e o período, até 3 trechos reais como evidência, a recomendação e o botão "registrar ação". O que não entra nos 3 cards fica um toque adiante, em "outros temas".
 - **Linha de cobertura fixa:** total de avaliações lidas, cards, temas monitorados sem ação e avaliações que a IA não soube classificar (baixa confiança).
 - **Sem presumir causa:** o texto diz "o padrão sugere" e recomenda investigar. Entregador nunca gera ação interna.
@@ -113,6 +113,26 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - **Resumo semanal:** segunda-feira às 8h, no fuso America/Sao\_Paulo. Só é enviado se houver algo a decidir; um indicador "última leitura" no painel mostra que o sistema está vivo.
 - **Medição do efeito:** compara a taxa de menções por 100 avaliações entre semanas, antes e depois de uma ação concluída. É uma comparação simulada e não prova causalidade.
 - **Prazo de resposta:** cada avaliação guarda o prazo de 5 dias do iFood, para a versão futura de respostas em lote ([fonte](https://blog-parceiros.ifood.com.br/avaliacoes-e-moderacoes/)). Na v1, os rascunhos de resposta em lote são opcionais e o primeiro corte se houver atraso.
+
+**Decisão tomada (30/10/2026), Fase 2:** priorização dos cards semanais. O critério: o peso de gravidade reflete o quanto o problema, quando ocorre, pode comprometer o pedido. Os pesos e o fator de tendência são **hipóteses de priorização da v1, configuráveis e sem validação com dados reais**; não medem prejuízo, reembolso nem perda de clientes.
+
+| Categoria | Peso de gravidade |
+| --- | --- |
+| `qualidade_temperatura` | 3 |
+| `item_faltando` | 3 |
+| `atraso` | 2 |
+| `embalagem` | 2 |
+| `atendimento` | 2 |
+| `entregador` | não participa do ranking |
+
+- A fórmula está no bullet "Pontuação de um problema", acima: gravidade e tendência multiplicam as menções.
+- `fator_tendencia` vale 1,25 quando a taxa de menções por 100 avaliações aumentou em relação à semana anterior. Nos demais casos (taxa igual, taxa menor ou semana anterior não comparável) vale 1,0. A comparação usa a taxa por 100 avaliações, e não a quantidade absoluta, para que uma semana com mais avaliações não conte como crescimento.
+- Nesta configuração inicial nenhuma categoria tem peso 1.
+- `entregador` não ocupa um dos três cards, porque o restaurante não tem ação interna definida para ele. As menções continuam contadas e visíveis em "temas monitorados sem ação".
+- Limitação deliberada: `qualidade_temperatura` reúne problemas de intensidades diferentes e todos recebem o mesmo peso 3. A decisão em aberto sobre dividir a categoria está na seção "Categorias e criticidade".
+- Os casos com marcação crítica seguem o fluxo próprio de alertas, independentemente do ranking semanal.
+
+**Decisão em aberto (Fase 2):** definir o desempate entre pontuações iguais e o comportamento do ranking em semanas com poucas avaliações, incluindo a partir de quantas avaliações a comparação de taxa é considerada confiável. Isso deve ser resolvido antes de implementar o ranking. Definir também: (a) o que é `mencoes` (avaliações ou menções, janela e fuso) e o denominador de "por 100 avaliações"; (b) o que fazer se a taxa da semana anterior for 0, já que hoje qualquer aumento dá 1,25; (c) se uma avaliação crítica conta em `mencoes` e se pode ser evidência de um card, mantendo o "relato a verificar"; (d) onde os pesos são configurados, já que mudar um peso reordena semanas passadas, porque o ranking exibido não é gravado.
 
 ## Avaliação, critérios de aceitação e cronograma
 
