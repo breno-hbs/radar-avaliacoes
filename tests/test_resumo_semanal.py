@@ -358,7 +358,7 @@ def test_cobertura_com_amostra_pequena(cliente, ambiente):
     assert cobertura["tendencia"] == "tendência não calculada: amostra pequena"
     assert cobertura["total_lido"] == 21 and cobertura["nao_classificadas"] == 1
     assert cobertura["texto"] == (
-        "Cobertura: 21 avaliações lidas, 0 cards, temas monitorados sem ação: entregador (0), "
+        "Cobertura: 21 avaliações lidas, 0 cards, temas monitorados sem ação: Entregador (0), "
         "1 avaliações que a IA não conseguiu classificar (saída inválida); "
         "tendência não calculada: amostra pequena."
     )
@@ -384,7 +384,7 @@ def test_cobertura_conta_cards_e_temas_sem_acao(cliente, ambiente):
     cobertura = _get(cliente).json()["cobertura"]
     assert cobertura["cards"] == 1
     assert cobertura["temas_sem_acao"] == [{"categoria": "entregador", "mencoes": 1}]
-    assert "1 cards" in cobertura["texto"] and "entregador" in cobertura["texto"]
+    assert "1 cards" in cobertura["texto"] and "Entregador (1)" in cobertura["texto"]
 
 
 # ---------- mensagem ----------
@@ -666,3 +666,44 @@ def test_leituras_numa_transacao_so(cliente, ambiente, monkeypatch):
     commit = comandos.index("COMMIT")
     assert begin < selects[0] and selects[3] < commit
     assert comandos.index("INSERT") > commit
+
+
+# ---------- nomes curtos ----------
+
+NOMES_CURTOS = {
+    "atraso": "Atraso na entrega",
+    "item_faltando": "Item ausente ou errado",
+    "qualidade_temperatura": "Qualidade ou temperatura da comida",
+    "embalagem": "Embalagem inadequada ou com vazamento",
+    "atendimento": "Atendimento do restaurante",
+}
+
+
+def test_nomes_curtos_definidos_por_categoria_e_dentro_do_limite():
+    assert resumo.PROBLEMAS == NOMES_CURTOS
+    assert resumo.NOMES_SEM_ACAO == {"entregador": "Entregador"}
+    for nome in [*resumo.PROBLEMAS.values(), *resumo.NOMES_SEM_ACAO.values()]:
+        assert len(nome) <= 45 and "_" not in nome and "," not in nome, nome
+
+
+def test_campo_problema_e_a_mensagem_usam_o_nome_curto(cliente, ambiente):
+    _varias(ambiente, 20)
+    for categoria, n in (("qualidade_temperatura", 5), ("item_faltando", 4), ("atraso", 6),
+                         ("embalagem", 2), ("atendimento", 1), ("entregador", 2)):
+        for _ in range(n):
+            _grava(ambiente, SEGUNDA + timedelta(days=1), categorias=[categoria])
+    _acao(ambiente, "embalagem", "2026-10-19T03:00:00+00:00", "pendente")
+    corpo = _get(cliente).json()
+    assert {c["categoria"]: c["problema"] for c in corpo["cards"]} == {
+        "qualidade_temperatura": "Qualidade ou temperatura da comida",
+        "item_faltando": "Item ausente ou errado",
+        "atraso": "Atraso na entrega",
+    }
+    m = corpo["mensagem"]
+    assert "1. Qualidade ou temperatura da comida: 5 avaliações" in m
+    assert "Outros temas: Embalagem inadequada ou com vazamento (2); Atendimento do restaurante (1)." in m
+    assert "Entregador (2)" in corpo["cobertura"]["texto"]
+    assert "- Embalagem inadequada ou com vazamento (semana de 19/10): pendente" in m
+    for descricao_longa in ("Comida fria, sabor", "Demora no preparo", "Vazamento, embalagem amassada",
+                            "Trato do restaurante"):
+        assert descricao_longa not in m and descricao_longa not in json.dumps(corpo, ensure_ascii=False)

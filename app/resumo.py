@@ -20,19 +20,20 @@ RECOMENDACOES = {
     "atendimento": "Orientar a equipe responsável",
 }
 
-# O problema em uma linha: coluna "O que cobre" da mesma tabela.
+# O problema em uma linha: nome curto por categoria (a coluna "O que cobre" da tabela é uma descrição longa).
+# Até 45 caracteres, sem "_" e sem vírgula: aparecem no título do card, em "Outros temas" e nas ações.
 PROBLEMAS = {
-    "atraso": "Demora no preparo ou na entrega",
+    "atraso": "Atraso na entrega",
     "item_faltando": "Item ausente ou errado",
-    "qualidade_temperatura": "Comida fria, sabor, ingrediente, preparo, porção e apresentação",
-    "embalagem": "Vazamento, embalagem amassada ou inadequada",
-    "atendimento": "Trato do restaurante com o cliente",
+    "qualidade_temperatura": "Qualidade ou temperatura da comida",
+    "embalagem": "Embalagem inadequada ou com vazamento",
+    "atendimento": "Atendimento do restaurante",
 }
 
 # Nomes legíveis para a mensagem, que o dono lê como texto simples: sem identificadores com "_".
 NOMES_CRITICOS = {"saude": "saúde", "alergia": "alergia", "cobranca_indevida": "cobrança indevida"}
 NOMES_ESTADO_ACAO = {"pendente": "pendente", "em_andamento": "em andamento", "concluida": "concluída"}
-NOMES_SEM_ACAO = {"entregador": "entregador"}
+NOMES_SEM_ACAO = {"entregador": "Entregador"}
 
 TEXTO_TENDENCIA = {
     ranking.MOTIVO_AMOSTRA_PEQUENA: "tendência não calculada: amostra pequena",
