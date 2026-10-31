@@ -88,7 +88,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Decisão tomada (31/10/2026), Fase 2:** a coluna `confianca` é substituída por `status_classificacao`, com os valores `ok` e `invalida`. O critério: o classificador congelado da v1 devolve só `categorias` e `criticidade`, sem nenhum valor de confiança, e pedir um ao modelo alteraria o prompt e o esquema congelados (seria uma v2, com conjunto novo de avaliação). Regras:
 
-- `invalida` é o resultado da regra de retentativa congelada (`REGRA_RETENTATIVA`, em `app/classificador.py`, que é a fonte desta lista) quando a última falha, depois de até 3 chamadas, é de conteúdo da resposta: resposta cortada (`max_tokens`), recusa (`refusal`), resposta sem bloco de texto, texto que não é JSON ou JSON fora do contrato. Todas as demais são `ok`. Falha técnica (timeout, erro de conexão, 408, 409, 429, 5xx) e erro permanente da API (400, 401, 403 e outros) não são `invalida`; ver a decisão em aberto sobre falha técnica.
+- `invalida` é o resultado da regra de retentativa congelada (`REGRA_RETENTATIVA`, em `app/classificador.py`, que é a fonte desta lista) quando a última falha, depois de até 3 chamadas, é de conteúdo da resposta: resposta cortada (`max_tokens`), recusa (`refusal`), resposta sem bloco de texto, texto que não é JSON ou JSON fora do contrato. Todas as demais são `ok`. Falha técnica (timeout, erro de conexão, 408, 409, 429, 5xx) e erro permanente da API (400, 401, 403 e outros) não são `invalida`; ver a decisão tomada sobre falhas do classificador.
 - É um estado objetivo da classificação, não uma medida de dúvida nem uma probabilidade.
 - A avaliação `invalida` é gravada com `categorias` e `criticidade` vazias e é contada na linha de cobertura, em "avaliações que a IA não conseguiu classificar (saída inválida)".
 - Marcar como suspeitas as avaliações com nota baixa e sem categoria fica para uma versão futura, porque a especificação ainda não define nota baixa.
@@ -101,6 +101,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - Falha técnica esgotada (timeout, erro de conexão, 408, 409, 429 ou 5xx depois das 3 chamadas): o endpoint devolve 503 e não grava nada. O simulador reenvia a avaliação depois.
 - Erro permanente da API (400, 401, 403 e outros), que indica problema de configuração: o endpoint devolve 500 e não grava nada. O erro não é repetido.
 - Risco aceito: se a avaliação não for reenviada, ela se perde, inclusive uma avaliação crítica. Isso faz parte da decisão em aberto sobre reprocessamento.
+- Respostas: 201 com `avaliacao_id`, `criada` verdadeiro e `alerta_id` quando a avaliação é gravada; 200 com `avaliacao_id` e `criada` falso quando o `id_externo` já existe (duplicata). Dados inválidos (campo ausente, tipo errado ou `recebida_em` sem fuso) recebem 422, depois de conferida a chave.
 
 **Decisão tomada (30/10/2026), Fase 2:** cada ação registrada fica ligada às avaliações que serviram de evidência, na tabela `acao_avaliacoes`. O critério: o sistema guarda o que o dono viu quando decidiu. Regras:
 
