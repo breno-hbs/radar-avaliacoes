@@ -41,7 +41,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Fora das marcações:** ofensa e discriminação. O blog de parceiros do iFood informa que comentários ofensivos são descartados antes de chegar à loja ([fonte](https://blog-parceiros.ifood.com.br/avaliacoes-e-moderacoes/)), então o dono provavelmente nunca os veria.
 
-**Decisão em aberto para depois da avaliação:** `qualidade_temperatura` fica junta na v1. Se a matriz de erros da Fase 1 mostrar confusão com `atraso` e `embalagem`, ou se o dono precisar de ações diferentes, a categoria é dividida.
+**Decisão tomada (30/10/2026):** `qualidade_temperatura` continua junta na v1. Na avaliação oficial, os 9 itens da categoria não tiveram erros nas 3 rodadas, mas a amostra é pequena. A categoria só é dividida se o dono precisar de ações diferentes ou se uma avaliação futura mostrar confusão com `atraso` e `embalagem`.
 
 **Decisão tomada (30/10/2026), Fase 2:** uma avaliação com várias marcações críticas gera **um único alerta**, que lista todos os tipos identificados. O critério: a unidade do alerta é o que o dono precisa verificar, e ele verifica uma avaliação, não um tipo de marcação.
 
@@ -51,7 +51,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 | Rota | Quem chama | Autenticação | O que faz |
 | --- | --- | --- | --- |
-| `POST /avaliacoes` | Simulador | Cabeçalho `X-API-Key` | Recebe `id_externo`, `texto`, `nota`, `recebida_em`. Valida, ignora duplicata, classifica e, se houver marcação crítica, cria um único alerta com todos os tipos identificados |
+| `POST /avaliacoes` | Simulador | Cabeçalho `X-API-Key` | Recebe `id_externo`, `texto`, `nota`, `recebida_em` (com fuso). Valida, ignora duplicata, classifica e, se houver marcação crítica, cria um único alerta com todos os tipos identificados |
 | `GET /resumo-semanal` | n8n | `X-API-Key` | Devolve período, total, negativas, 3 principais problemas, críticos, ações pendentes e o link do painel |
 | `GET /painel/{token}` | Dono (navegador) | Token com validade (tokens\_painel) | Serve a página mobile-first |
 | `GET /api/painel/{token}/cards` | Painel | Token | Cards com problema, evidências e recomendação |
@@ -108,7 +108,13 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Decisão em aberto (Fase 2):** definir como o `POST /api/painel/{token}/acoes` recebe as evidências exibidas e como o servidor confere que elas pertencem ao card (por exemplo, que a avaliação é da categoria e da semana do card e que `trecho_exibido` vem do texto dela), sem recalcular o ranking. Considerar que um `trecho_exibido` vindo do cliente é texto não confiável: pode ser forjado e, se o painel o renderizar sem tratamento, permitir XSS armazenado. A decisão deve dizer se o servidor o deriva do texto da avaliação em vez de aceitá-lo.
 
-**Decisão em aberto (Fase 2):** definir se uma ação pode existir sem evidências, se `trecho_exibido` e `posicao` aceitam nulo, e o comportamento ao apagar uma ação ou uma avaliação com evidências ligadas (`RESTRICT` ou `CASCADE`).
+**Decisão tomada (31/10/2026), Fase 2:** esquema de `acao_avaliacoes`, integridade e datas, adotados na camada de persistência (`app/banco.py`). Regras:
+
+- `trecho_exibido` e `posicao` não aceitam nulo.
+- As chaves estrangeiras usam `ON DELETE RESTRICT`: não se apaga uma ação, uma avaliação ou uma avaliação com alerta enquanto houver registros ligados a elas.
+- O esquema permite uma ação sem evidências. A exigência de pelo menos uma evidência fica para a API, ao registrar a ação.
+- `recebida_em` precisa ter fuso: uma data sem fuso é recusada. As datas (`recebida_em`, `prazo_resposta`, `criado_em` e `enviado_em` do alerta, `expira_em` do token) são gravadas em UTC, em ISO 8601 com `+00:00`.
+- As semanas continuam definidas em America/Sao\_Paulo. Para consultar uma semana, os limites são convertidos para UTC, o que permite comparar os textos das datas.
 
 **Requisito de implementação:** o SQLite só aplica chaves estrangeiras com `PRAGMA foreign_keys=ON` em cada conexão. A Fase 2 deve ativá-lo e ter um teste que tente gravar uma evidência de avaliação inexistente.
 
