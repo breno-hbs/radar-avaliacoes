@@ -82,6 +82,12 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 **Limite da unicidade:** a restrição única do banco impede um segundo registro de alerta para a mesma avaliação, mas não garante que o Telegram receba uma só mensagem. Se a mensagem for entregue e a confirmação do Telegram se perder (por exemplo, por tempo esgotado), a nova tentativa a envia de novo. Essa entrega duplicada pode ocorrer excepcionalmente. A v1 não garante entrega exatamente uma vez.
 
+**Decisão tomada (31/10/2026):** envio do alerta crítico ao Telegram. Regras:
+
+- O `POST /avaliacoes` grava a avaliação e o alerta `pendente`, responde normalmente e envia a mensagem em tarefa de fundo. A resposta e o código HTTP não dependem do Telegram.
+- O `criado_em` do alerta é o instante em que a requisição entrou no endpoint, em UTC. O tempo do critério 5 é `enviado_em − criado_em`, lido da tabela `alertas`, sem coluna nova.
+- Se o token ou o chat do Telegram não estiver configurado, nada é enviado: o alerta fica `pendente`, com `tentativas` igual a 0, e um aviso é registrado no log.
+
 **Prioridade:** não perder um alerta crítico. Um alerta `falhou` continua registrado no banco, e o caso também aparece no resumo semanal. Como garantir que um alerta `pendente` ou `falhou` seja entregue é a decisão em aberto abaixo.
 
 **Decisão em aberto (Fase 2):** definir a recuperação de alertas `pendente` após o reinício do servidor e o tratamento dos alertas `falhou` (reenvio automático, reenvio manual ou apenas o registro). Registrar o alerta no banco e mostrá-lo no resumo semanal não equivale a garantir aviso imediato ao dono: um alerta `pendente` ou `falhou` pode ficar sem ser entregue até o próximo resumo. Definir também se o resumo semanal mostra o estado do alerta (`pendente`, `enviado` ou `falhou`), já que o contrato de `GET /resumo-semanal` não o inclui.
