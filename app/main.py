@@ -240,6 +240,15 @@ def _cards_do_painel(semana_param, relogio, config) -> dict:
     }
 
 
+def _caminho_do_painel(request) -> bool:
+    return request.url.path.startswith("/api/painel/")
+
+
+def _em_sao_paulo(texto):
+    """ISO gravado em UTC -> ISO com fuso America/Sao_Paulo (None continua None)."""
+    return None if texto is None else datetime.fromisoformat(texto).astimezone(semana.FUSO).isoformat()
+
+
 def _historico_do_painel() -> dict:
     """GET /api/painel/{token}/historico. Só lê o banco; o trecho exibido é o gravado."""
     with closing(banco.abrir(_caminho_do_banco_existente())) as conn:
@@ -252,6 +261,10 @@ def _historico_do_painel() -> dict:
         inicio_local = datetime.fromisoformat(s["semana_inicio"]).astimezone(semana.FUSO)
         s["semana_inicio"] = inicio_local.isoformat()
         s["rotulo"] = resumo.periodo(inicio_local)["rotulo"]
+    for s in semanas:
+        for a in s["acoes"]:  # o banco continua em UTC; a resposta sai no fuso de São Paulo
+            a["criada_em"] = _em_sao_paulo(a["criada_em"])
+            a["concluida_em"] = _em_sao_paulo(a["concluida_em"])
     return {"semanas": [{"semana_inicio": s["semana_inicio"], "rotulo": s["rotulo"], "acoes": s["acoes"]}
                         for s in semanas]}
 
@@ -403,15 +416,18 @@ def criar_app(*, recuperar_na_subida=None) -> FastAPI:
         # O token do painel vai na URL: sem Referer, ele não vaza para links externos.
         resposta = await chamar_proxima(request)
         resposta.headers["Referrer-Policy"] = "no-referrer"
+        if _caminho_do_painel(request):  # 200, 404, 422 e 500 das rotas do painel: nada de cache
+            resposta.headers["Cache-Control"] = "no-store"
         return resposta
 
     @app.exception_handler(Exception)
     async def falha_inesperada(request: Request, erro: Exception):
         # Roda no ServerErrorMiddleware, por fora do middleware acima: o cabeçalho vai aqui também.
         logger.error("falha inesperada (%s)", type(erro).__name__)
-        return JSONResponse(
-            status_code=500, content={"detail": "falha interna"}, headers={"Referrer-Policy": "no-referrer"}
-        )
+        cabecalhos = {"Referrer-Policy": "no-referrer"}
+        if _caminho_do_painel(request):
+            cabecalhos["Cache-Control"] = "no-store"
+        return JSONResponse(status_code=500, content={"detail": "falha interna"}, headers=cabecalhos)
 
     @app.exception_handler(ErroDeConfiguracao)
     async def configuracao_ausente(request: Request, erro: ErroDeConfiguracao):

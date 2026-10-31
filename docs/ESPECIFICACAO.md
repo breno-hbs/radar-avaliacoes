@@ -58,7 +58,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 | `GET /api/painel/{token}/cards` | Painel | Token | Cards com problema, evidências e recomendação |
 | `POST /api/painel/{token}/acoes` | Painel | Token | Registra uma ação com `categoria`, `semana_inicio` e de 1 a 3 evidências (só `avaliacao_id` e `posicao`); o servidor confere as evidências e deriva o trecho exibido do texto da avaliação |
 | `PATCH /api/painel/{token}/acoes/{id}` | Painel | Token | Muda o estado da ação |
-| `GET /api/painel/{token}/historico` | Painel | Token | Semanas anteriores, com as ações registradas, suas evidências (trecho exibido e posição) e o texto original das avaliações |
+| `GET /api/painel/{token}/historico` | Painel | Token | Semanas com ações registradas, da mais recente à mais antiga (inclui a semana mais recente), com as ações, as evidências (trecho exibido e posição) e o texto original das avaliações |
 
 **Regras de segurança:**
 
@@ -175,12 +175,13 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 
 - Semana dos cards: `?semana=AAAA-MM-DD`, com a mesma validação do `GET /resumo-semanal` (422 fora do formato ou fora da segunda-feira), ou a última semana completa. O token é conferido antes: link inválido dá o 404 uniforme mesmo com `?semana=` inválido.
 - Evidências do card: até 3 avaliações da semana com a categoria, ordenadas por menor nota, depois por `recebida_em` mais recente, depois por `id`. Avaliações críticas entram, marcadas como relato a verificar (`critica` verdadeiro).
-- Trecho: uma função única (`app/trechos.py`), a mesma que o `POST /api/painel/{token}/acoes` usará: espaços e quebras de linha normalizados, até 140 caracteres cortados em limite de palavra, com reticências quando houve corte.
+- Trecho: uma função única (`app/trechos.py`), a mesma que o `POST /api/painel/{token}/acoes` usará: espaços e quebras de linha normalizados, até 140 caracteres cortados em limite de palavra, com reticências quando houve corte. O trecho tem até 140 caracteres de texto e a reticência não conta (até 141 no total).
 - Resposta de `/cards`: `periodo`; até 3 `cards` (`categoria`, `problema` com o nome curto, `mencoes`, `taxa_por_100` com 1 casa, `tendencia_em_alta`, `recomendacao`, `evidencias` [{`avaliacao_id`, `posicao` de 1 a 3, `trecho`, `nota`, `critica`}] e `acao`, que é {`id`, `estado`} da ação mais recente da categoria naquela semana, ou nulo); `outros_temas`; `temas_sem_acao`; `cobertura` (o mesmo texto do resumo); `ultima_leitura`. Semana sem avaliações responde 200 com `cards` vazio.
 - `ultima_leitura` é o `recebida_em` mais recente do banco (o banco não guarda o instante de gravação), em ISO com fuso America/Sao\_Paulo, ou nulo quando não há avaliações.
-- `acoes.semana_inicio` guarda o início da semana em UTC (ISO com `+00:00`), o mesmo valor do limite inicial da semana usado nas consultas; é por ele que o card encontra a sua ação.
-- Resposta de `/historico`: `semanas` com pelo menos uma ação, da mais recente à mais antiga, no máximo 12. Cada uma traz `semana_inicio` (ISO com fuso America/Sao\_Paulo), `rotulo` e `acoes` [{`id`, `categoria`, `estado`, `criada_em`, `concluida_em`, `nota`, `evidencias` [{`posicao`, `trecho_exibido`, `texto_original`}]}]. O trecho exibido é o gravado em `acao_avaliacoes`, nunca recalculado.
-- As duas rotas só leem o banco, respondem com `Cache-Control: no-store` e devolvem os textos de avaliação como dados; o painel os renderiza como texto puro.
+- `acoes.semana_inicio` é gravada como o início da semana (segunda-feira 00:00 America/Sao\_Paulo) convertido para UTC (ISO com `+00:00`), o mesmo valor do limite inicial da semana usado nas consultas; é por ele que o card encontra a sua ação. O futuro `POST /api/painel/{token}/acoes` grava no mesmo formato.
+- Resposta de `/historico`: `semanas` com pelo menos uma ação, da mais recente à mais antiga, no máximo 12. Cada uma traz `semana_inicio` (ISO com fuso America/Sao\_Paulo), `rotulo` e `acoes` [{`id`, `categoria`, `estado`, `criada_em`, `concluida_em`, `nota`, `evidencias` [{`posicao`, `trecho_exibido`, `texto_original`}]}]. `criada_em` e `concluida_em` saem em ISO com fuso America/Sao\_Paulo, como `periodo` e `ultima_leitura` (o banco continua em UTC). O trecho exibido é o gravado em `acao_avaliacoes`, nunca recalculado.
+- As duas rotas só leem o banco, respondem com `Cache-Control: no-store` em todas as respostas (200, 404, 422 e 500) e devolvem os textos de avaliação como dados.
+- A página do painel busca o JSON e renderiza os textos com `textContent`; não embute dados de avaliação em `<script>` inline nem usa `innerHTML`.
 
 **Decisão tomada (31/10/2026), Fase 2:** esquema de `acao_avaliacoes`, integridade e datas, adotados na camada de persistência (`app/banco.py`). Regras:
 

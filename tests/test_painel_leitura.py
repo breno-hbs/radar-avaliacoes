@@ -271,7 +271,7 @@ def test_historico_ordem_semanas_sem_acao_ausentes_e_texto_original(cliente, amb
     assert acao["evidencias"] == [{"posicao": 1, "trecho_exibido": "trecho gravado na época",
                                    "texto_original": "texto original da avaliação, inteiro"}]
     assert semanas[0]["acoes"][1]["evidencias"] == []  # ação sem evidência
-    assert semanas[2]["acoes"][0]["concluida_em"] == "2026-10-12T12:00:00+00:00"
+    assert semanas[2]["acoes"][0]["concluida_em"] == "2026-10-12T09:00:00-03:00"
     assert semanas[1]["acoes"][0]["id"] == a2 and semanas[2]["acoes"][0]["id"] == a1
 
 
@@ -393,3 +393,59 @@ def test_trecho_da_evidencia_tem_o_valor_esperado(cliente, ambiente, token):
     _avaliacao(ambiente, SEGUNDA + timedelta(days=1), texto=texto)
     esperado = ("a comida chegou fria e " + "muito " * 19).rstrip() + "…"  # 137 caracteres + reticências
     assert _painel(cliente, token).json()["cards"][0]["evidencias"][0]["trecho"] == esperado
+
+
+# ---------- terceiro commit: fuso do histórico e Cache-Control em todos os códigos ----------
+
+def test_historico_criada_em_e_concluida_em_em_sao_paulo(cliente, ambiente, token):
+    # 01:30 UTC de 27/10 é 22:30 de 26/10 em São Paulo (dia local anterior)
+    _acao_com_evidencias(ambiente, "atraso", INICIO_UTC, "concluida", criada_em="2026-10-27T01:30:00+00:00",
+                         concluida_em="2026-10-28T14:00:00+00:00")
+    _acao_com_evidencias(ambiente, "embalagem", INICIO_UTC)  # concluida_em nulo
+    acoes = _painel(cliente, token, "historico").json()["semanas"][0]["acoes"]
+    assert acoes[0]["criada_em"] == "2026-10-26T22:30:00-03:00"
+    assert acoes[0]["concluida_em"] == "2026-10-28T11:00:00-03:00"
+    assert acoes[1]["concluida_em"] is None
+    assert [a["criada_em"] for a in acoes][1] == "2026-10-27T09:00:00-03:00"  # o padrão de _acao_com_evidencias
+    with closing(banco.abrir(ambiente)) as conn:  # o banco continua em UTC
+        assert conn.execute("SELECT criada_em FROM acoes ORDER BY id").fetchone()[0] == "2026-10-27T01:30:00+00:00"
+
+
+def _provoca_500_generico(monkeypatch, rota):
+    from app import consultas
+
+    def explode(*a, **k):
+        raise RuntimeError("detalhe interno")
+
+    monkeypatch.setattr(consultas, "listar_historico" if rota == "historico" else "ultima_leitura", explode)
+
+
+@pytest.mark.parametrize("rota", ROTAS)
+def test_cache_control_em_200_404_e_500(cliente, ambiente, token, monkeypatch, tmp_path, rota):
+    ok = _painel(cliente, token, rota)
+    invalido = _painel(cliente, "malformado", rota)
+    assert (ok.status_code, invalido.status_code) == (200, 404)
+
+    monkeypatch.setenv("RADAR_DB", str(tmp_path / "nao_existe.db"))
+    configuracao = _painel(cliente, token, rota)  # 500 de configuração (ErroDeConfiguracao)
+    assert configuracao.status_code == 500
+    monkeypatch.setenv("RADAR_DB", str(ambiente))
+
+    _provoca_500_generico(monkeypatch, rota)
+    inesperado = _painel(cliente, token, rota)  # 500 genérico (ServerErrorMiddleware)
+    assert inesperado.status_code == 500 and inesperado.json() == {"detail": "falha interna"}
+
+    for r in (ok, invalido, configuracao, inesperado):
+        assert r.headers["cache-control"] == "no-store", r.status_code
+        assert r.headers["referrer-policy"] == "no-referrer"
+
+
+def test_cache_control_no_422_dos_cards(cliente, token):
+    r = _painel(cliente, token, "cards", semana="2026-10-27")
+    assert r.status_code == 422 and r.headers["cache-control"] == "no-store"
+
+
+def test_cache_control_vale_para_o_caminho_do_painel_e_nao_para_as_outras_rotas(cliente):
+    assert cliente.post("/avaliacoes", json={}).headers.get("cache-control") is None  # 401, rota de outro assunto
+    assert cliente.get("/rota-que-nao-existe").headers.get("cache-control") is None
+    assert cliente.get("/api/painel/malformado/outra-coisa").headers["cache-control"] == "no-store"  # 404 do caminho
