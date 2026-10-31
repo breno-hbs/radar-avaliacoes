@@ -171,6 +171,17 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - Token inválido segue a regra uniforme do 404.
 - Os códigos de erro, a regra contra ação duplicada e a conferência de que a avaliação estava no card ficam para a Fase 4, ao desenhar o painel.
 
+**Decisão tomada (31/10/2026), Fase 2/4:** rotas de leitura do painel, `GET /api/painel/{token}/cards` e `GET /api/painel/{token}/historico`. Regras:
+
+- Semana dos cards: `?semana=AAAA-MM-DD`, com a mesma validação do `GET /resumo-semanal` (422 fora do formato ou fora da segunda-feira), ou a última semana completa. O token é conferido antes: link inválido dá o 404 uniforme mesmo com `?semana=` inválido.
+- Evidências do card: até 3 avaliações da semana com a categoria, ordenadas por menor nota, depois por `recebida_em` mais recente, depois por `id`. Avaliações críticas entram, marcadas como relato a verificar (`critica` verdadeiro).
+- Trecho: uma função única (`app/trechos.py`), a mesma que o `POST /api/painel/{token}/acoes` usará: espaços e quebras de linha normalizados, até 140 caracteres cortados em limite de palavra, com reticências quando houve corte.
+- Resposta de `/cards`: `periodo`; até 3 `cards` (`categoria`, `problema` com o nome curto, `mencoes`, `taxa_por_100` com 1 casa, `tendencia_em_alta`, `recomendacao`, `evidencias` [{`avaliacao_id`, `posicao` de 1 a 3, `trecho`, `nota`, `critica`}] e `acao`, que é {`id`, `estado`} da ação mais recente da categoria naquela semana, ou nulo); `outros_temas`; `temas_sem_acao`; `cobertura` (o mesmo texto do resumo); `ultima_leitura`. Semana sem avaliações responde 200 com `cards` vazio.
+- `ultima_leitura` é o `recebida_em` mais recente do banco (o banco não guarda o instante de gravação), em ISO com fuso America/Sao\_Paulo, ou nulo quando não há avaliações.
+- `acoes.semana_inicio` guarda o início da semana em UTC (ISO com `+00:00`), o mesmo valor do limite inicial da semana usado nas consultas; é por ele que o card encontra a sua ação.
+- Resposta de `/historico`: `semanas` com pelo menos uma ação, da mais recente à mais antiga, no máximo 12. Cada uma traz `semana_inicio` (ISO com fuso America/Sao\_Paulo), `rotulo` e `acoes` [{`id`, `categoria`, `estado`, `criada_em`, `concluida_em`, `nota`, `evidencias` [{`posicao`, `trecho_exibido`, `texto_original`}]}]. O trecho exibido é o gravado em `acao_avaliacoes`, nunca recalculado.
+- As duas rotas só leem o banco, respondem com `Cache-Control: no-store` e devolvem os textos de avaliação como dados; o painel os renderiza como texto puro.
+
 **Decisão tomada (31/10/2026), Fase 2:** esquema de `acao_avaliacoes`, integridade e datas, adotados na camada de persistência (`app/banco.py`). Regras:
 
 - `trecho_exibido` e `posicao` não aceitam nulo.
