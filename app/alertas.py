@@ -97,6 +97,52 @@ def enviar_alerta(caminho_banco, alerta_id: int, mensagem: str, notificador, rel
         logger.error("falha ao processar o envio do alerta %s (%s)", alerta_id, type(e).__name__)
 
 
+def enviar_alerta_reprocessado(caminho_banco, alerta_id: int, mensagem: str, notificador, relogio) -> str:
+    """Bloco 2.9: envio feito pelo script de reprocessamento, logo depois de gravar o alerta.
+
+    Não é reenvio (a mensagem não leva a linha de criação) e não respeita a janela de 5 minutos. UMA
+    tentativa, somada antes de enviar; sucesso grava `enviado`, falha grava `falhou` (a chamada horária
+    retoma). Telegram não configurado não é tentativa: o alerta fica `pendente`. Devolve 'enviado',
+    'falhou' ou 'pendente'. Nunca levanta exceção nem registra a mensagem da exceção.
+    """
+    if notificador is None:
+        logger.warning(
+            "Telegram não configurado (RADAR_TELEGRAM_TOKEN ou RADAR_TELEGRAM_CHAT_ID ausente): "
+            "alerta %s fica pendente",
+            alerta_id,
+        )
+        return "pendente"
+    try:
+        with closing(banco.abrir(caminho_banco)) as conn:
+            try:
+                conn.execute("UPDATE alertas SET tentativas = tentativas + 1 WHERE id = ?", (alerta_id,))
+            except Exception as e:  # noqa: BLE001 - sem a tentativa gravada, nada é enviado
+                logger.error(
+                    "alerta %s não foi enviado: a tentativa não pôde ser gravada (%s); fica pendente",
+                    alerta_id, type(e).__name__,
+                )
+                return "pendente"
+            try:
+                notificador(mensagem)
+            except Exception as e:  # noqa: BLE001 - qualquer erro conta como falha
+                logger.warning(
+                    "falha no envio do alerta %s ao Telegram (%s)", alerta_id, getattr(e, "motivo", type(e).__name__)
+                )
+                conn.execute("UPDATE alertas SET estado = 'falhou' WHERE id = ? AND estado <> 'enviado'", (alerta_id,))
+                return "falhou"
+            try:
+                banco.mudar_estado_alerta(conn, alerta_id, "enviado", enviado_em=relogio().isoformat())
+            except Exception as e:  # noqa: BLE001 - a mensagem já saiu: não tentar de novo
+                logger.error(
+                    "alerta %s entregue ao Telegram, mas o estado enviado não foi gravado (%s)",
+                    alerta_id, type(e).__name__,
+                )
+            return "enviado"
+    except Exception as e:  # noqa: BLE001 - o script segue para a próxima avaliação
+        logger.error("falha ao processar o envio do alerta %s (%s)", alerta_id, type(e).__name__)
+        return "falhou"
+
+
 # ---------- recuperação de alertas (bloco 2.8) ----------
 
 ESTADOS_REENVIO = ("pendente", "falhou")  # POST /alertas/reenviar

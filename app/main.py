@@ -213,18 +213,22 @@ def _resumo_semanal(semana_param, relogio, config) -> dict:
             atual = consultas.contar_semana(conn, *intervalo)
             anterior = consultas.contar_semana(conn, *semana.intervalo_utc(inicio_anterior))
             criticos = consultas.listar_criticos(conn, *intervalo)
+            invalidas = consultas.listar_invalidas(conn, *intervalo)
+            falhos = consultas.listar_alertas_falhos(conn)  # de qualquer semana: ?semana= não filtra
             acoes = consultas.listar_acoes_pendentes(conn)
         finally:
             conn.execute("COMMIT")  # só leitura: nada a desfazer; libera antes do BEGIN IMMEDIATE do token
         resultado = ranking.calcular_ranking(atual, anterior if anterior.total > 0 else None, config)
-        enviar = resumo.deve_enviar(resultado, criticos, acoes, config)
+        enviar = resumo.deve_enviar(resultado, criticos, acoes, config, invalidas, falhos)
+        curto = resumo.aviso_curto(resultado, criticos, acoes, config, invalidas, falhos)
 
         def montar(link):
             return resumo.montar(inicio, resultado, criticos, acoes, amostra_minima=config.amostra_minima,
-                                 enviar=enviar, link_painel=link)
+                                 enviar=enviar, link_painel=link, invalidas=invalidas,
+                                 alertas_falhos=falhos, curto=curto)
 
         corpo = montar(None)  # tudo calculado e montado antes do token: uma falha aqui não deixa token
-        if not enviar:
+        if not enviar or curto:  # aviso curto: sem link e sem token
             return corpo
         token = tokens.criar_token_painel(conn, agora=agora)  # a única escrita da rota
     return montar(f"{url_base}/painel/{token}")

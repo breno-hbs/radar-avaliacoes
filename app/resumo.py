@@ -65,9 +65,25 @@ def periodo(inicio: datetime) -> dict:
     }
 
 
-def deve_enviar(resultado, criticos, acoes_pendentes, config) -> bool:
-    """Há algo a decidir: card, crítico ou ação pendente; ou volume pequeno (aviso curto)."""
-    return bool(resultado.cards or criticos or acoes_pendentes or resultado.total < config.amostra_minima)
+def ha_algo_a_decidir(resultado, criticos, acoes_pendentes, invalidas=(), alertas_falhos=()) -> bool:
+    """Card, crítico, avaliação `invalida` da semana, alerta `falhou` não reconhecido ou ação pendente."""
+    return bool(resultado.cards or criticos or acoes_pendentes or invalidas or alertas_falhos)
+
+
+def deve_enviar(resultado, criticos, acoes_pendentes, config, invalidas=(), alertas_falhos=()) -> bool:
+    """Há algo a decidir, ou a semana tem volume pequeno (aviso curto)."""
+    return (ha_algo_a_decidir(resultado, criticos, acoes_pendentes, invalidas, alertas_falhos)
+            or resultado.total < config.amostra_minima)
+
+
+def aviso_curto(resultado, criticos, acoes_pendentes, config, invalidas=(), alertas_falhos=()) -> bool:
+    """Só o volume pequeno motivou o envio: sai o aviso curto, sem link e sem token."""
+    return (not ha_algo_a_decidir(resultado, criticos, acoes_pendentes, invalidas, alertas_falhos)
+            and resultado.total < config.amostra_minima)
+
+
+def _hora_local(texto_iso: str) -> str:
+    return datetime.fromisoformat(texto_iso).astimezone(semana.FUSO).strftime("%d/%m %H:%M")
 
 
 def _cobertura(resultado) -> dict:
@@ -91,6 +107,41 @@ def _cobertura(resultado) -> dict:
     }
 
 
+def _secoes(outros, criticos, invalidas, alertas_falhos, acoes_pendentes) -> list:
+    """Seções do formato normal. Nenhuma leva texto de avaliação; os ids passam por _limpo."""
+    linhas = []
+    if outros:
+        linhas.append("Outros temas: " + "; ".join(f"{PROBLEMAS[c.categoria]} ({c.mencoes})" for c in outros) + ".")
+    if criticos:
+        linhas.append("Relatos a verificar:")
+        for c in criticos:
+            estado = f"alerta {c['estado_alerta']}" if c["estado_alerta"] else "sem alerta registrado"
+            reconhecido = ", reconhecido" if c.get("reconhecido") else ""
+            tipos = ", ".join(NOMES_CRITICOS.get(t, t) for t in c["tipos"])
+            linhas.append(f"- {_limpo(c['id_externo'])}: {tipos}, relato a verificar, {estado}{reconhecido}")
+    if invalidas:
+        linhas.append("Classificação falhou, verificar manualmente:")
+        for inv in invalidas:
+            linhas.append(f"- {_limpo(inv['id_externo'])}: nota {inv['nota']}")
+    # Os `falhou` desta semana já estão em "Relatos a verificar": a mensagem não os repete (o JSON pode).
+    da_semana = {c["id_externo"] for c in criticos}
+    de_outras = [f for f in alertas_falhos if f["id_externo"] not in da_semana]
+    if de_outras:
+        linhas.append("Alertas que não chegaram:")
+        for f in de_outras:
+            tipos = ", ".join(NOMES_CRITICOS.get(t, t) for t in f["tipos"])
+            linhas.append(
+                f"- {_limpo(f['id_externo'])}: {tipos}, relato a verificar, alerta criado em {_hora_local(f['criado_em'])}"
+            )
+    if acoes_pendentes:
+        linhas.append("Ações pendentes:")
+        for a in acoes_pendentes:
+            problema = PROBLEMAS.get(a["categoria"], _limpo(a["categoria"]))
+            estado = NOMES_ESTADO_ACAO.get(a["estado"], _limpo(a["estado"]))
+            linhas.append(f"- {problema} (semana de {_semana_da_acao(a['semana_inicio'])}): {estado}")
+    return linhas
+
+
 def _semana_da_acao(texto: str) -> str:
     try:
         return _dia_mes(datetime.fromisoformat(texto))
@@ -99,8 +150,10 @@ def _semana_da_acao(texto: str) -> str:
 
 
 def montar(inicio: datetime, resultado, criticos, acoes_pendentes, *, amostra_minima: int, enviar: bool,
-           link_painel) -> dict:
+           link_painel, invalidas=(), alertas_falhos=(), curto=False) -> dict:
+    """JSON e mensagem do resumo. `curto`: só o volume pequeno motivou o envio (aviso curto, sem link)."""
     per = periodo(inicio)
+    invalidas, alertas_falhos = list(invalidas), list(alertas_falhos)
     cards = [
         {
             "categoria": c.categoria,
@@ -114,8 +167,11 @@ def montar(inicio: datetime, resultado, criticos, acoes_pendentes, *, amostra_mi
     ]
     cobertura = _cobertura(resultado)
 
-    linhas = [f"Resumo semanal do Radar (dados simulados): {per['rotulo']}"]
-    if cards:
+    linhas = ["(dados simulados)", f"Resumo semanal do Radar: {per['rotulo']}"]
+    if curto:  # aviso curto: o total lido e a linha de cobertura, sem seções nem link
+        linhas.append(f"Semana com volume pequeno: {resultado.total} avaliações lidas.")
+        linhas.append(cobertura["texto"])
+    elif cards:
         linhas.append("O padrão sugere investigar estes problemas:")
         for i, (card, original) in enumerate(zip(cards, resultado.cards), start=1):
             taxa = str(_uma_casa(original.taxa_por_100)).replace(".", ",")
@@ -124,24 +180,10 @@ def montar(inicio: datetime, resultado, criticos, acoes_pendentes, *, amostra_mi
                 f"{i}. {card['problema']}: {card['mencoes']} avaliações de {per['rotulo']} "
                 f"({taxa} por 100{alta}). Recomendação: {card['recomendacao']}."
             )
-    elif resultado.total < amostra_minima:  # volume pequeno sem cards: aviso curto
-        linhas.append(f"Semana com volume pequeno: {resultado.total} avaliações lidas.")
     outros = resultado.outros_temas
-    if outros:
-        linhas.append("Outros temas: " + "; ".join(f"{PROBLEMAS[c.categoria]} ({c.mencoes})" for c in outros) + ".")
-    if criticos:
-        linhas.append("Relatos a verificar:")
-        for c in criticos:
-            estado = c["estado_alerta"] or "sem alerta registrado"
-            tipos = ", ".join(NOMES_CRITICOS.get(t, t) for t in c["tipos"])
-            linhas.append(f"- {_limpo(c['id_externo'])}: {tipos}, relato a verificar, alerta {estado}")
-    if acoes_pendentes:
-        linhas.append("Ações pendentes:")
-        for a in acoes_pendentes:
-            problema = PROBLEMAS.get(a["categoria"], _limpo(a["categoria"]))
-            estado = NOMES_ESTADO_ACAO.get(a["estado"], _limpo(a["estado"]))
-            linhas.append(f"- {problema} (semana de {_semana_da_acao(a['semana_inicio'])}): {estado}")
-    linhas.append(cobertura["texto"])
+    if not curto:
+        linhas.extend(_secoes(outros, criticos, invalidas, alertas_falhos, acoes_pendentes))
+        linhas.append(cobertura["texto"])
     if link_painel:
         linhas.append(f"Painel: {link_painel}")
 
@@ -154,6 +196,8 @@ def montar(inicio: datetime, resultado, criticos, acoes_pendentes, *, amostra_mi
         "outros_temas": [{"categoria": c.categoria, "mencoes": c.mencoes} for c in outros],
         "temas_sem_acao": cobertura["temas_sem_acao"],
         "criticos": criticos,
+        "invalidas_a_verificar": invalidas,
+        "alertas_falhos": alertas_falhos,
         "acoes_pendentes": acoes_pendentes,
         "cobertura": cobertura,
         "enviar": enviar,
