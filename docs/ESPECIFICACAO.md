@@ -194,6 +194,8 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - Taxas, fator e pontuação são frações exatas, sem ponto flutuante. O aumento da taxa é comparado por multiplicação cruzada de inteiros: `mencoes_atual × total_anterior > mencoes_anterior × total_atual`.
 - "Outros temas" são as categorias do ranking com menções que ficaram fora dos 3 cards, na mesma ordem. "Temas monitorados sem ação" são as categorias fora do ranking (`entregador`), sempre listadas com suas menções.
 - Avaliação negativa é a de nota menor ou igual a 2.
+- O validador da configuração recusa um `fator_tendencia` que viole "peso vence tendência": para cada par de pesos distintos consecutivos, `fator × menor_peso` deve ser menor que `maior_peso`. Com pesos 2 e 3, 1,5 é recusado e 1,49 é aceito; com 1,25 continua valendo.
+- O resultado do ranking traz `motivo_sem_tendencia`: `null` quando a tendência foi calculada; `sem_semana_anterior` quando não há semana anterior, com o texto de cobertura "tendência não calculada: sem semana anterior"; `amostra_pequena` quando a semana anterior existe, mas uma das duas semanas tem menos de N avaliações, com o texto "tendência não calculada: amostra pequena". O endpoint passa `anterior=None` quando a semana anterior tem 0 avaliações.
 
 ## Avaliação, critérios de aceitação e cronograma
 

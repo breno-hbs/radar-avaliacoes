@@ -269,11 +269,11 @@ def test_mudar_um_valor_da_config_muda_o_resultado():
                                            config_ranking.validar_config(pesos))) == ["atraso", "item_faltando"]
 
     fator = copy.deepcopy(PADRAO)
-    fator["fator_tendencia"] = 2
+    fator["fator_tendencia"] = Decimal("1.4")
     r = ranking.calcular_ranking(C(20, atraso=4, item_faltando=3), C(20, item_faltando=3),
                                  config_ranking.validar_config(fator))
-    assert _ordem(r) == ["atraso", "item_faltando"]  # 4×2×2 = 16 contra 9
-    assert _card(r, "atraso").fator_tendencia == 2
+    assert _ordem(r) == ["atraso", "item_faltando"]  # 4×2×1,4 = 11,2 contra 9
+    assert _card(r, "atraso").fator_tendencia == Fraction(7, 5)
 
     n = copy.deepcopy(PADRAO)
     n["amostra_minima"] = 10
@@ -287,3 +287,38 @@ def test_ranking_nao_tem_valores_fixos_no_codigo():
     fonte = inspect.getsource(ranking)
     for proibido in ("1.25", "Fraction(5, 4)", "= 20", "qualidade_temperatura", "entregador"):
         assert proibido not in fonte, proibido
+
+
+# ---------- motivo_sem_tendencia ----------
+
+def test_motivo_none_quando_a_tendencia_foi_calculada(cfg):
+    r = ranking.calcular_ranking(C(20, atraso=2), C(20, atraso=1), cfg)
+    assert r.tendencia_calculada is True and r.motivo_sem_tendencia is None
+
+
+def test_motivo_sem_semana_anterior(cfg):
+    r = ranking.calcular_ranking(C(50, atraso=2), None, cfg)
+    assert r.tendencia_calculada is False and r.motivo_sem_tendencia == "sem_semana_anterior"
+
+
+@pytest.mark.parametrize("atual,anterior", [(19, 20), (20, 19), (19, 19), (5, 100), (100, 5)])
+def test_motivo_amostra_pequena(cfg, atual, anterior):
+    r = ranking.calcular_ranking(C(atual, atraso=2), C(anterior, atraso=1), cfg)
+    assert r.tendencia_calculada is False and r.motivo_sem_tendencia == "amostra_pequena"
+
+
+def test_anterior_com_total_0_e_n_20_e_amostra_pequena(cfg):
+    r = ranking.calcular_ranking(C(50, atraso=2), C(0), cfg)
+    assert r.tendencia_calculada is False and r.motivo_sem_tendencia == "amostra_pequena"
+
+
+def test_sem_semana_anterior_vence_amostra_pequena_da_atual(cfg):
+    r = ranking.calcular_ranking(C(3, atraso=1), None, cfg)
+    assert r.motivo_sem_tendencia == "sem_semana_anterior"
+
+
+def test_tendencia_calculada_e_motivo_sempre_coerentes(cfg):
+    for atual in (0, 19, 20, 40):
+        for anterior in (None, C(0), C(19), C(20), C(40)):
+            r = ranking.calcular_ranking(C(atual), anterior, cfg)
+            assert r.tendencia_calculada == (r.motivo_sem_tendencia is None)

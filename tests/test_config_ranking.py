@@ -165,3 +165,71 @@ def test_float_passado_direto_ao_validador_e_recusado():
     dados = copy.deepcopy(VALIDA)  # VALIDA usa 1.25 como float do Python
     with pytest.raises(config_ranking.ErroNaConfiguracao, match="fator_tendencia"):
         config_ranking.validar_config(dados)
+
+
+# ---------- peso vence tendência ----------
+
+def _config_com(fator, **pesos):
+    dados = copy.deepcopy(VALIDA)
+    dados["pesos"].update(pesos)
+    dados["fator_tendencia"] = Decimal(str(fator))
+    return dados
+
+
+def test_fator_1_5_com_pesos_2_e_3_e_recusado_e_1_4999_aceito():
+    with pytest.raises(config_ranking.ErroNaConfiguracao, match="peso vence tendência"):
+        config_ranking.validar_config(_config_com("1.5"))
+    assert config_ranking.validar_config(_config_com("1.4999")).fator_tendencia == Fraction(14999, 10000)
+    assert config_ranking.validar_config(_config_com("1.49")).fator_tendencia == Fraction(149, 100)
+    assert config_ranking.validar_config(_config_com("1.25")).fator_tendencia == Fraction(5, 4)
+
+
+def test_fator_acima_do_limite_e_recusado():
+    for fator in ("1.51", "2", "3"):
+        with pytest.raises(config_ranking.ErroNaConfiguracao, match="peso vence tendência"):
+            config_ranking.validar_config(_config_com(fator))
+
+
+def test_mensagem_da_regra_e_curta_e_cita_fator_tendencia():
+    with pytest.raises(config_ranking.ErroNaConfiguracao) as erro:
+        config_ranking.validar_config(_config_com("1.5"))
+    assert "fator_tendencia" in str(erro.value) and len(str(erro.value)) < 200
+
+
+def test_pesos_todos_iguais_nao_tem_par_distinto():
+    iguais = dict(qualidade_temperatura=2, item_faltando=2, atraso=2, embalagem=2, atendimento=2)
+    # qualquer fator > 1 vale, até um bem alto
+    assert config_ranking.validar_config(_config_com("10", **iguais)).fator_tendencia == 10
+    with pytest.raises(config_ranking.ErroNaConfiguracao, match="fator_tendencia"):
+        config_ranking.validar_config(_config_com("1", **iguais))  # continua exigindo > 1
+
+
+def test_pesos_diferentes_mudam_o_limite():
+    # pesos 1 e 2: o fator precisa ser < 2
+    um_e_dois = dict(qualidade_temperatura=2, item_faltando=2, atraso=1, embalagem=1, atendimento=1)
+    assert config_ranking.validar_config(_config_com("1.99", **um_e_dois)).fator_tendencia == Fraction(199, 100)
+    with pytest.raises(config_ranking.ErroNaConfiguracao, match="peso vence tendência"):
+        config_ranking.validar_config(_config_com("2", **um_e_dois))
+    # pesos 2 e 5: o limite sobe para 2,5
+    dois_e_cinco = dict(qualidade_temperatura=5, item_faltando=5, atraso=2, embalagem=2, atendimento=2)
+    assert config_ranking.validar_config(_config_com("2.49", **dois_e_cinco)).amostra_minima == 20
+    with pytest.raises(config_ranking.ErroNaConfiguracao):
+        config_ranking.validar_config(_config_com("2.5", **dois_e_cinco))
+
+
+def test_tres_pesos_distintos_vale_o_par_consecutivo_mais_apertado():
+    # pesos 2, 3 e 4: pares (2,3) -> < 1,5 e (3,4) -> < 1,3333; manda o mais apertado
+    tres = dict(qualidade_temperatura=4, item_faltando=3, atraso=2, embalagem=2, atendimento=3)
+    assert config_ranking.validar_config(_config_com("1.33", **tres))
+    with pytest.raises(config_ranking.ErroNaConfiguracao, match="peso vence tendência"):
+        config_ranking.validar_config(_config_com("1.34", **tres))
+
+
+def test_entregador_nao_entra_na_regra():
+    # entregador não tem peso; só os pesos do ranking contam
+    assert config_ranking.validar_config(_config_com("1.49"))
+
+
+def test_arquivo_versionado_respeita_peso_vence_tendencia():
+    cfg = config_ranking.carregar_config()
+    assert cfg.fator_tendencia * 2 < 3

@@ -81,6 +81,14 @@ def validar_config(dados) -> ConfigRanking:
     fator = Fraction(fator)
     if fator <= 1:
         raise ErroNaConfiguracao("fator_tendencia deve ser maior que 1")
+    # Peso vence tendência: um tema de peso menor em alta nunca alcança o de peso maior. Basta olhar os
+    # pesos distintos consecutivos, em ordem crescente: fator × menor deve ficar abaixo do maior.
+    distintos = sorted(set(no_ranking.values()))
+    for menor, maior in zip(distintos, distintos[1:]):
+        if fator * menor >= maior:
+            raise ErroNaConfiguracao(
+                f"fator_tendencia viola \"peso vence tendência\": {menor} × fator deve ser menor que {maior}"
+            )
 
     amostra = dados["amostra_minima"]
     if not _inteiro(amostra) or amostra < 1:

@@ -12,6 +12,8 @@ from typing import Mapping, Optional
 from app import contrato
 
 MAX_CARDS = 3  # "O dono vê no máximo 3 cards por semana"
+MOTIVO_SEM_SEMANA_ANTERIOR = "sem_semana_anterior"
+MOTIVO_AMOSTRA_PEQUENA = "amostra_pequena"
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,8 @@ class ResultadoRanking:
     outros_temas: list
     temas_sem_acao: list
     tendencia_calculada: bool
+    # None se a tendência foi calculada; senão "sem_semana_anterior" ou "amostra_pequena" (linha de cobertura)
+    motivo_sem_tendencia: Optional[str]
     total: int
     invalidas: int
     negativas: int
@@ -77,7 +81,13 @@ def calcular_ranking(atual: ContagemSemana, anterior: Optional[ContagemSemana], 
         _validar(anterior, "semana anterior")
 
     n = config.amostra_minima
-    tendencia_calculada = anterior is not None and atual.total >= n and anterior.total >= n
+    if anterior is None:
+        motivo = MOTIVO_SEM_SEMANA_ANTERIOR
+    elif atual.total < n or anterior.total < n:
+        motivo = MOTIVO_AMOSTRA_PEQUENA
+    else:
+        motivo = None
+    tendencia_calculada = motivo is None
 
     candidatos = []
     for categoria, gravidade in config.pesos.items():
@@ -105,6 +115,7 @@ def calcular_ranking(atual: ContagemSemana, anterior: Optional[ContagemSemana], 
         outros_temas=candidatos[MAX_CARDS:],
         temas_sem_acao=[TemaSemAcao(c, atual.mencoes.get(c, 0)) for c in config.fora_do_ranking],
         tendencia_calculada=tendencia_calculada,
+        motivo_sem_tendencia=motivo,
         total=atual.total,
         invalidas=atual.invalidas,
         negativas=atual.negativas,
