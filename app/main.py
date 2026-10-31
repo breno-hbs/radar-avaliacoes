@@ -265,12 +265,19 @@ class EvidenciaDaAcao(BaseModel):
     posicao: StrictInt = Field(ge=1, le=3)
 
 
+def _nota_vazia_vira_nulo(nota):
+    """Nota vazia ou só com espaços vira None; nota com texto fica exatamente como chegou (sem strip)."""
+    return None if nota is not None and not nota.strip() else nota
+
+
 class NovaAcao(BaseModel):
     model_config = ConfigDict(extra="forbid")
     categoria: StrictStr
     semana_inicio: StrictStr
     evidencias: list[EvidenciaDaAcao] = Field(min_length=1, max_length=3)
     nota: Optional[StrictStr] = Field(None, max_length=LIMITE_NOTA)
+
+    _nota = field_validator("nota")(_nota_vazia_vira_nulo)
 
     @model_validator(mode="after")
     def _distintas(self):
@@ -285,6 +292,8 @@ class MudancaDaAcao(BaseModel):
     model_config = ConfigDict(extra="forbid")
     estado: Optional[Literal["pendente", "em_andamento", "concluida"]] = None
     nota: Optional[StrictStr] = Field(None, max_length=LIMITE_NOTA)
+
+    _nota = field_validator("nota")(_nota_vazia_vira_nulo)
 
     @model_validator(mode="after")
     def _pelo_menos_um(self):
