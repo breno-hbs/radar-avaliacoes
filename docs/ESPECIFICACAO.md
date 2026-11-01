@@ -217,6 +217,7 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - Divergências aprovadas em relação ao desenho: cards decididos completos (não compactos), fonte system-ui (a Inter não está em `app/painel/`) e "1 de 3 decidido" no singular.
 - Fase 3: o workflow do n8n deve enviar a mensagem do resumo sem pré-visualização de link (`disable_web_page_preview`), para que os servidores do Telegram não abram `/painel/<token>`.
 - Pendência conhecida: o teste automático no navegador (Playwright) não existe. A conferência foi manual.
+- Acabamento (só apresentação): a linha técnica de cobertura nas telas 01 e 06 fica atrás do botão "Como o Radar leu esta semana" (recolhida a cada carga, texto do servidor sem alteração, só com `textContent`), e a tela 01 mostra uma faixa de atenção acima dos cartões quando `cobertura.total_lido` é menor que a amostra mínima (o mesmo N = 20 do JS). Nenhum contrato muda; o texto técnico continua disponível.
 
 **Decisão tomada (31/10/2026), Fase 2:** esquema de `acao_avaliacoes`, integridade e datas, adotados na camada de persistência (`app/banco.py`). Regras:
 
