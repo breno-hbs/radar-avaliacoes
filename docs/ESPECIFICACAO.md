@@ -197,6 +197,27 @@ O simulador envia avaliações ao FastAPI. O n8n pede o resumo toda segunda e o 
 - PATCH com 409: a nota enviada junto **não** é gravada (tudo ou nada).
 - Janela entre conferir as evidências e gravar: hoje é inofensiva, porque o reprocessamento só altera avaliações `invalida`, que nunca passam na conferência. Se isso mudar, a conferência precisa ir para dentro da transação.
 
+**Decisão tomada (31/10/2026), Fase 4, bloco 4.3:** página do painel, `GET /painel/{token}`. O critério: a página é só uma vitrine das rotas que já existem, e nenhum texto vindo do servidor é interpretado como HTML. Regras:
+
+- Os arquivos da página ficam em `app/painel/` (HTML, CSS e JS), sem framework e sem etapa de build. A rota confere o token com a mesma validação das rotas do painel e devolve o HTML. O CSS e o JS são servidos em `/estatico/painel/...`, fora do caminho que leva o token.
+- Token inexistente, expirado, revogado, malformado ou de outro escopo: 404 com a página estática "Link inválido ou expirado", a mesma para todos os motivos. `/painel/` sem token ou com mais de um trecho no caminho dá a mesma página com 404. Falha de configuração ou de banco continua 500 genérico.
+- Cabeçalhos da página (200 e 404): `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff` e `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`. Por isso o HTML não tem script inline, atributo `style` nem atributo de evento.
+- O JS lê o token do caminho e chama só `/cards`, `/historico`, o POST e o PATCH de ações. O token não vai para `localStorage`, cookie, query string nem console. O HTML não traz dado de avaliação; todo texto vindo da API entra na página com `textContent`. Um teste varre o JS contra `innerHTML`, `insertAdjacentHTML`, `outerHTML`, `document.write`, `eval` e `new Function`.
+- Na abertura, a página busca `/cards` (última semana completa) e `/historico`. Os cards trazem só `id` e `estado` da ação; a nota e as datas vêm do histórico, pelo `id`.
+- `outros_temas`, `temas_sem_acao` e o histórico trazem só a categoria. O nome curto e a recomendação de cada categoria são repetidos no JS, e um teste confere que são iguais aos de `app/resumo.py`.
+- Semana sem cards: a explicação de volume pequeno só aparece quando `cobertura.total_lido` é menor que N = 20. O N fica no JS, e um teste confere que é igual ao `amostra_minima` da configuração do ranking.
+- O POST envia todas as evidências do card (só `avaliacao_id` e `posicao`) e omite a nota vazia. 201 mostra o card com a ação; 409 recarrega os dados e mostra o estado real, sem erro; 404 mostra a página de link inválido; 422, 500 ou falha de rede mostram "Não foi possível salvar", sem ler o corpo do erro e mantendo a nota digitada. O POST e o PATCH decidem só pelo código de status e não leem o corpo da resposta.
+- No PATCH, 200 e 409 recarregam os dados; 422, 500 ou falha de rede mostram "A mudança não foi salva" (a ação já existe, então a página não diz "nada foi registrado"). O 404 do PATCH também recarrega, porque pode ser "ação não encontrada" ou link inválido: se o link for inválido, o `/cards` responde 404 e a página mostra a tela de link inválido.
+- Depois da primeira carga, a página recarrega os cards com `?semana=` da semana aberta, para que a virada da semana com a página aberta não troque os cards na tela.
+- A página só oferece "Marcar como concluída" e "Editar nota" (o estado `em_andamento` é exibido se existir). O selo de uma ação `pendente` diz "Decidida".
+- A página não promete link novo na segunda-feira: o workflow do n8n ainda não existe.
+- Texto do card: a página mostra a taxa ("X em cada 100 avaliações citam este problema") e o período no subtítulo, e o botão se chama "Vou fazer isso". Isso substitui, só para o painel, "a quantidade e o período" e o botão "registrar ação" da seção "Regras de negócio". A regra "o padrão sugere" vale para a mensagem do resumo semanal; o painel usa "O que fazer". Os contratos e as mensagens do resumo semanal não mudam.
+- Limite conhecido da v1: `/historico` não traz `critica`, então a tela 05 não mostra o rótulo "relato a verificar" em uma evidência crítica. O contrato não muda.
+- Limites conhecidos de navegação e carga: o "voltar" do celular sai do painel, e a falha ao recarregar depois de salvar mostra "Não consegui carregar" sem confirmar que a ação foi salva.
+- Divergências aprovadas em relação ao desenho: cards decididos completos (não compactos), fonte system-ui (a Inter não está em `app/painel/`) e "1 de 3 decidido" no singular.
+- Fase 3: o workflow do n8n deve enviar a mensagem do resumo sem pré-visualização de link (`disable_web_page_preview`), para que os servidores do Telegram não abram `/painel/<token>`.
+- Pendência conhecida: o teste automático no navegador (Playwright) não existe. A conferência foi manual.
+
 **Decisão tomada (31/10/2026), Fase 2:** esquema de `acao_avaliacoes`, integridade e datas, adotados na camada de persistência (`app/banco.py`). Regras:
 
 - `trecho_exibido` e `posicao` não aceitam nulo.
