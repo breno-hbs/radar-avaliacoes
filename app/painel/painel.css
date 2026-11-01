@@ -361,6 +361,26 @@ button:disabled { cursor: default; }
   font-weight: 600;
 }
 
+.detalhe-cobertura {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.link-centro { justify-content: center; }
+
+.aviso-amostra {
+  margin: 0 16px 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--atencao-fundo);
+  color: var(--atencao);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
 .cobertura, .ultima-leitura {
   color: var(--secundario);
   font-size: 13px;

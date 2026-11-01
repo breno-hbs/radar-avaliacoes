@@ -126,7 +126,7 @@ def test_arquivos_estaticos(cliente, arquivo, tipo):
     assert r.status_code == 200
     assert r.headers["content-type"].startswith(tipo)
     assert r.headers["x-content-type-options"] == "nosniff"
-    assert r.text == (PAINEL / arquivo).read_text(encoding="utf-8")
+    assert r.content == (PAINEL / arquivo).read_bytes()  # bytes: o checkout no Windows pode trazer CRLF
 
 
 @pytest.mark.parametrize("caminho_pedido", [
@@ -233,3 +233,66 @@ def test_token_nao_aparece_no_log_ao_abrir_a_pagina(tmp_path):
     assert st_invalido == 404 and st_js == 200
     assert valido not in log
     assert "GET /painel/*** HTTP" in log  # a requisição da página, e não a do arquivo estático
+
+
+# ---------- acabamento: cobertura recolhida e aviso de amostra pequena ----------
+
+def _funcao_do_js(nome):
+    """Corpo da função `nome` (declarada com 2 espaços de recuo, como todas do painel.js)."""
+    achou = re.search(rf"\n  function {nome}\(.*?\n  }}\n", _js(), re.DOTALL)
+    assert achou, nome
+    return achou.group(0)
+
+
+def test_cobertura_nao_vem_no_html_nem_aparece_por_padrao(cliente, token):
+    pagina = cliente.get(f"/painel/{token}").text
+    for nome in ("index.html", "link-invalido.html"):
+        html = (PAINEL / nome).read_text(encoding="utf-8")
+        assert "cobertura" not in html.lower() and "saída inválida" not in html
+    assert "cobertura" not in pagina.lower() and "Como o Radar leu esta semana" not in pagina  # só o JS escreve
+
+
+def test_cobertura_comeca_escondida_e_entra_por_textcontent():
+    corpo = _funcao_do_js("detalheDeCobertura")
+    assert 'texto: "Como o Radar leu esta semana"' in corpo
+    assert "estado.cards.cobertura.texto" in corpo  # o texto do servidor, sem reescrever
+    assert "texto.hidden = true;" in corpo  # fechado por padrão, a cada carga
+    assert 'attrs: { id }' in corpo and '"aria-controls": id' in corpo  # o botão controla o parágrafo
+    assert '"aria-expanded": "false"' in corpo
+    assert "texto: estado.cards.cobertura.texto" in corpo  # el() grava com textContent
+    assert "localStorage" not in corpo and "sessionStorage" not in corpo
+
+
+def test_cobertura_so_aparece_pelo_detalhe_nas_telas_01_e_06():
+    js = _js()
+    assert "linhaCobertura" not in js  # a linha solta saiu
+    rodape = _funcao_do_js("rodapeDaSemana")
+    assert "filhos.push(detalheDeCobertura())" in rodape
+    assert rodape.index("cartaoLink(\"Semanas anteriores\"") < rodape.index("detalheDeCobertura()") < rodape.index("linhaUltimaLeitura()")
+    tranquila = _funcao_do_js("telaSemanaTranquila")
+    assert tranquila.index("por-que") < tranquila.index("detalheDeCobertura()")  # depois do bloco "Por que…"
+    css = (PAINEL / "painel.css").read_text(encoding="utf-8")
+    assert "min-height: 44px" in re.search(r"\n\.link \{.*?\}", css, re.DOTALL).group(0)  # alvo de toque
+
+
+def test_aviso_de_amostra_pequena_usa_o_mesmo_limite_e_o_singular():
+    corpo = _funcao_do_js("avisoDeAmostraPequena")
+    assert "AMOSTRA_MINIMA" in corpo
+    assert not re.search(r"\b20\b", corpo)  # nenhum segundo "20": o valor ligado ao servidor é um só
+    assert 'plural(total, "avaliação", "avaliações")' in corpo
+    assert "Li só " in corpo and "menos das " in corpo and "Trate o que aparece abaixo como sinal, não como certeza." in corpo
+    assert '"role": "note"' in corpo or 'role: "note"' in corpo
+    assert "total >= AMOSTRA_MINIMA" in corpo  # com 20 ou mais, nenhuma faixa
+
+
+def test_aviso_so_na_tela_01_com_cartoes():
+    semana = _funcao_do_js("telaSemana")
+    assert "avisoDeAmostraPequena(total)" in semana and "if (aviso) partes.push(aviso)" in semana
+    assert semana.index("if (aviso) partes.push(aviso)") < semana.index("partes.push(cartaoDoCard")  # antes do 1º cartão
+    assert "avisoDeAmostraPequena" not in _funcao_do_js("telaSemanaTranquila")
+
+
+def test_css_do_aviso_usa_so_a_paleta_do_desenho():
+    css = (PAINEL / "painel.css").read_text(encoding="utf-8")
+    bloco = re.search(r"\.aviso-amostra \{.*?\}", css, re.DOTALL).group(0)
+    assert "var(--atencao)" in bloco and "var(--atencao-fundo)" in bloco and "border-radius: 16px" in bloco

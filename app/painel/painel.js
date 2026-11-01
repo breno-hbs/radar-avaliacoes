@@ -241,8 +241,31 @@
     return el("p", { classe: "ultima-leitura", texto });
   }
 
-  function linhaCobertura() {
-    return el("p", { classe: "cobertura", texto: estado.cards.cobertura.texto });
+  /** "Como o Radar leu esta semana": o texto técnico do servidor fica atrás de um toque, fechado a cada carga. */
+  function detalheDeCobertura() {
+    const id = novoId("cobertura");
+    const texto = el("p", { classe: "cobertura", texto: estado.cards.cobertura.texto, attrs: { id } });
+    texto.hidden = true;
+    const b = el("button", {
+      classe: "link link-centro", texto: "Como o Radar leu esta semana",
+      attrs: { type: "button", "aria-expanded": "false", "aria-controls": id },
+    });
+    b.addEventListener("click", () => {
+      const abrir = texto.hidden;
+      texto.hidden = !abrir;
+      b.setAttribute("aria-expanded", String(abrir));
+    });
+    return el("div", { classe: "detalhe-cobertura" }, [b, texto]);
+  }
+
+  /** Faixa de atenção acima dos cartões quando a semana tem menos avaliações que o mínimo. */
+  function avisoDeAmostraPequena(total) {
+    if (total >= AMOSTRA_MINIMA) return null;
+    return el("p", {
+      classe: "aviso-amostra", attrs: { role: "note" },
+      texto: "Li só " + total + " " + plural(total, "avaliação", "avaliações") + ", menos das " + AMOSTRA_MINIMA
+        + " que preciso para ter segurança. Trate o que aparece abaixo como sinal, não como certeza.",
+    });
   }
 
   function cartaoLink(titulo, subtitulo, aoClicar) {
@@ -334,6 +357,8 @@
     ]);
 
     const partes = [cabecalho(titulo, subtitulo, progresso)];
+    const aviso = avisoDeAmostraPequena(total);
+    if (aviso) partes.push(aviso); // sem faixa com a amostra suficiente
     cards.forEach((card, i) => partes.push(cartaoDoCard(card, i + 1, n)));
     partes.push(rodapeDaSemana());
     return partes;
@@ -455,7 +480,7 @@
   function rodapeDaSemana() {
     const filhos = [cartaoOutrosTemas(true)];
     filhos.push(cartaoLink("Semanas anteriores", null, () => irPara("anteriores")));
-    filhos.push(linhaCobertura());
+    filhos.push(detalheDeCobertura());
     filhos.push(linhaUltimaLeitura());
     return el("footer", { classe: "rodape" }, filhos);
   }
@@ -496,7 +521,7 @@
     const anteriores = el("button", { classe: "cartao-link cartao-link-centro", texto: "Ver semanas anteriores",
       attrs: { type: "button" } });
     anteriores.addEventListener("click", () => irPara("anteriores"));
-    filhos.push(anteriores, linhaCobertura(), linhaUltimaLeitura());
+    filhos.push(anteriores, detalheDeCobertura(), linhaUltimaLeitura());
     partes.push(el("footer", { classe: "rodape" }, filhos));
     return partes;
   }
