@@ -22,6 +22,7 @@ import threading
 from contextlib import asynccontextmanager, closing
 from datetime import date, datetime, time, timedelta, timezone
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Optional
 from urllib.parse import urlsplit
 
@@ -386,7 +387,27 @@ def _mudar_acao(acao_id_texto: str, mudanca: MudancaDaAcao, relogio) -> dict:
 
 
 def _caminho_do_painel(request) -> bool:
-    return request.url.path.startswith("/api/painel/")
+    return request.url.path.startswith(("/api/painel/", "/painel/"))
+
+
+# ---------- página do painel (bloco 4.3) ----------
+
+PASTA_PAINEL = Path(__file__).resolve().parent / "painel"
+# Só estes dois arquivos são servidos como estáticos; os HTML saem pela rota com token.
+ESTATICOS_DO_PAINEL = {"painel.js": "text/javascript; charset=utf-8", "painel.css": "text/css; charset=utf-8"}
+CSP_DO_PAINEL = (
+    "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; "
+    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+)
+
+
+def _pagina_do_painel(arquivo: str, status: int) -> Response:
+    """HTML estático do painel, sem nenhum dado: o JS busca tudo na API e escreve com textContent."""
+    return Response(
+        content=(PASTA_PAINEL / arquivo).read_bytes(), status_code=status, media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store", "Content-Security-Policy": CSP_DO_PAINEL,
+                 "X-Content-Type-Options": "nosniff"},
+    )
 
 
 def _em_sao_paulo(texto):
@@ -617,6 +638,32 @@ def criar_app(*, recuperar_na_subida=None) -> FastAPI:
     ):
         resposta.headers["Cache-Control"] = "no-store"
         return _cards_do_painel(semana_param, relogio, config)
+
+    # Página do painel (bloco 4.3): o mesmo token das rotas da API. Link inválido, por qualquer motivo, dá a
+    # mesma página estática de "link inválido ou expirado" com 404; falha de banco continua 500 genérico.
+    @app.get("/painel/{token}")
+    def painel_pagina(token: str, relogio=Depends(obter_relogio)):
+        try:
+            exigir_token(token, relogio)
+        except HTTPException as e:
+            if e.status_code != 404:
+                raise
+            return _pagina_do_painel("link-invalido.html", 404)
+        return _pagina_do_painel("index.html", 200)
+
+    @app.get("/painel/{resto:path}")
+    def painel_caminho_invalido(resto: str):
+        # /painel/ vazio ou com mais de um trecho: nunca é um link válido; a mesma página do 404 uniforme.
+        return _pagina_do_painel("link-invalido.html", 404)
+
+    @app.get("/estatico/painel/{arquivo}")
+    def painel_estatico(arquivo: str):
+        if arquivo not in ESTATICOS_DO_PAINEL:  # lista fechada: nada de caminho vindo da URL
+            raise HTTPException(status_code=404, detail="não encontrado")
+        return Response(
+            content=(PASTA_PAINEL / arquivo).read_bytes(), media_type=ESTATICOS_DO_PAINEL[arquivo],
+            headers={"X-Content-Type-Options": "nosniff"},
+        )
 
     @app.get("/api/painel/{token}/historico")
     def painel_historico(resposta: Response, token: str = Depends(exigir_token)):

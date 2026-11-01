@@ -282,13 +282,14 @@ def test_referrer_policy_em_200_404_e_401(cenario):
 
 
 def test_rotas_de_painel_sao_as_de_leitura_e_as_de_acao():
-    # Bloco 4.1: as duas rotas de leitura. Bloco 4.2: POST e PATCH de ações. A página HTML
-    # (GET /painel/{token}) fica para o bloco seguinte.
+    # Bloco 4.1: as duas rotas de leitura. Bloco 4.2: POST e PATCH de ações. Bloco 4.3: a página HTML
+    # (GET /painel/{token}) e os dois arquivos estáticos dela, fora do caminho com token.
     rotas = {(getattr(r, "path", ""), m) for r in main.criar_app().routes for m in getattr(r, "methods", ())}
     do_painel = {(p, m) for p, m in rotas if "painel" in p}
     assert do_painel == {
         ("/api/painel/{token}/cards", "GET"), ("/api/painel/{token}/historico", "GET"),
         ("/api/painel/{token}/acoes", "POST"), ("/api/painel/{token}/acoes/{acao_id}", "PATCH"),
+        ("/painel/{token}", "GET"), ("/painel/{resto:path}", "GET"), ("/estatico/painel/{arquivo}", "GET"),
     }
 
 
