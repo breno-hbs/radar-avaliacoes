@@ -1,5 +1,101 @@
 # radar-avaliacoes
-Assistente que transforma avaliações de restaurante em até 3 ações por semana. Dados simulados. Projeto independente, sem vínculo com o iFood.
+
+O Radar de Avaliações é um assistente para o dono de restaurante que recebe muitas avaliações de clientes e tem pouco tempo para lê-las. Ele classifica cada avaliação, avisa na hora quando há um relato grave a verificar e, uma vez por semana, transforma o que foi dito em até 3 ações. O dono decide cada uma pelo painel, em uma página pensada para o celular.
+
+Dados simulados. Projeto independente, sem vínculo com o iFood.
+
+## Como funciona
+
+```mermaid
+flowchart TD
+    A["Avaliação entra<br/>POST /avaliacoes (X-API-Key)"] --> B["Classificação<br/>prompt v1 congelado"]
+    B --> C{"Marcação crítica?"}
+    C -- sim --> D["Alerta crítico no Telegram<br/>(relato a verificar)"]
+    C -- não --> E[("SQLite")]
+    D --> E
+    F["n8n, segunda 8h<br/>GET /resumo-semanal"] --> G{"enviar?"}
+    G -- sim --> H["Resumo semanal no Telegram<br/>com o link do painel"]
+    H --> I["Painel: até 3 cards"]
+    I --> J["Ação registrada<br/>POST /api/painel/{token}/acoes"]
+    K["n8n, de hora em hora<br/>POST /alertas/reenviar"] -.-> D
+```
+
+O FastAPI é o único dono das regras e dos dados; o n8n só chama rotas e o Telegram só recebe mensagens
+([especificação](docs/ESPECIFICACAO.md), seção "Contratos e dados"). Respostas públicas a clientes nunca são enviadas automaticamente.
+
+## O que já roda
+
+| O quê | Onde está |
+| --- | --- |
+| API FastAPI com SQLite: recebe avaliações, ignora duplicata, exige `X-API-Key` | [`app/main.py`](app/main.py), [`app/banco.py`](app/banco.py), [`tests/test_api_avaliacoes.py`](tests/test_api_avaliacoes.py) |
+| Classificador multirrótulo e detecção de criticidade (prompt v1 congelado) | [`app/classificador.py`](app/classificador.py), [`prompts/classificador/v1.md`](prompts/classificador/v1.md) |
+| Alerta crítico no Telegram, um por avaliação | [`app/alertas.py`](app/alertas.py), [`app/telegram.py`](app/telegram.py), [`tests/test_alerta_telegram.py`](tests/test_alerta_telegram.py) |
+| Recuperação de alertas: reenvio por `POST /alertas/reenviar`, teto de tentativas e reconhecimento manual | [`app/alertas.py`](app/alertas.py), [`scripts/reconhecer_alerta.py`](scripts/reconhecer_alerta.py), [especificação](docs/ESPECIFICACAO.md) |
+| Ranking dos 3 principais problemas da semana e resumo semanal (`GET /resumo-semanal`) | [`app/ranking.py`](app/ranking.py), [`config/ranking.json`](config/ranking.json), [`app/resumo.py`](app/resumo.py) |
+| Painel mobile-first (`/painel/{token}`): cards, ação, histórico, link com validade de 7 dias | [`app/painel/`](app/painel/), [`app/tokens.py`](app/tokens.py), `tests/test_painel_*.py` |
+| Workflows do n8n: resumo semanal e reenvio de alertas, como JSON importáveis | [`n8n/`](n8n/), [`docs/N8N.md`](docs/N8N.md), [`tests/test_n8n_workflows.py`](tests/test_n8n_workflows.py) |
+| Simulador de avaliações e semana sintética fixa para o teste de 2 minutos | [`scripts/simulador.py`](scripts/simulador.py), [`scripts/semana_de_teste.py`](scripts/semana_de_teste.py) |
+
+## Medido até agora
+
+Tudo sobre dados simulados. Nenhuma linha abaixo comprova desempenho real.
+
+| O quê | Resultado | Data | Ressalvas |
+| --- | --- | --- | --- |
+| Alerta crítico: tempo até a confirmação do Telegram | 18 alertas; mediana de 1,8 s, máximo de 6,8 s | 31/10/2026 | Uma rodada, dados simulados. O tempo vai da entrada no endpoint à confirmação do Telegram e inclui a classificação. Sem teste de carga. Medido com [`scripts/medir_alertas.py`](scripts/medir_alertas.py); o resultado dessa rodada não está versionado no repositório. |
+| Classificação multirrótulo e criticidade (65 avaliações reservadas, 3 rodadas) | Veja [Resultado da avaliação oficial da v1](#resultado-da-avaliação-oficial-da-v1) | 30/10/2026 | Amostra pequena, rotulador único, dados fictícios criados com apoio de IA. Veja também "O que estes números não dizem" e "Limitações". |
+| Teste de 2 minutos | Meta não atingida (226 s) | 01/11/2026 | Veja a seção abaixo. |
+
+## Teste de 2 minutos
+
+Teste feito em 01/11/2026 com 1 testadora, no computador (navegador com janela estreita e mouse), com a semana sintética fixa. Tempo até o 3º card marcado como concluído: 226 s (3 min 46 s). A meta de 120 s não foi atingida. Ela não pediu ajuda. A hesitação observada foi na rolagem do mouse. Ela marcou os 3 cards como concluídos, não preencheu a nota em nenhum, e depois do 3º não soube o que fazer. O tempo por card não foi anotado. Teste exploratório com 1 pessoa, sem validação estatística, feito no computador e não no celular.
+
+A v1 não tem aviso de fim depois do último card. Que isso explique a dúvida da testadora é uma hipótese a testar, não uma conclusão.
+
+O roteiro está em [`docs/TESTE_2_MINUTOS.md`](docs/TESTE_2_MINUTOS.md).
+
+## Como rodar
+
+Ative o ambiente (dependências em `requirements.txt`; `requirements-dev.txt` para os testes):
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+### Servidor
+
+As variáveis ficam no `.env`, que não vai para o Git: `RADAR_API_KEY`, `RADAR_DB`, `RADAR_URL_BASE`, `ANTHROPIC_API_KEY`, `RADAR_TELEGRAM_TOKEN` e `RADAR_TELEGRAM_CHAT_ID`. O uvicorn carrega o arquivo com `--env-file`:
+
+```
+uvicorn app.main:app --env-file .env
+```
+
+`RADAR_URL_BASE` é o endereço do app (http ou https, sem barra final) e a base do link do painel: o link da mensagem é `RADAR_URL_BASE/painel/<token>`. Ausente ou inválida, o `GET /resumo-semanal` responde 500 e não cria token. Para teste local use `http://127.0.0.1:8000`; **com esse valor, o link só abre no computador onde o app roda.**
+
+A v1 roda com **um processo**: o uvicorn sem `--workers`, que é o padrão. O SQLite aceita um escritor por vez, e a trava que evita o envio duplicado de alerta vale dentro do processo. Com `--workers N`, uma mensagem de alerta pode sair duplicada num restart. É uma limitação conhecida; a alternativa futura é um estado "em envio" no esquema.
+
+`GET /resumo-semanal` (com `X-API-Key`) devolve o resumo da última semana completa, ou da semana de `?semana=AAAA-MM-DD`. Cada chamada com algo a enviar cria um link novo do painel (exceto no aviso curto de volume pequeno, que não leva link).
+
+### Testes
+
+```powershell
+pytest -W error::ResourceWarning
+```
+
+### n8n
+
+Como subir (`npx n8n`), importar os dois workflows, configurar credenciais e executar manualmente: [`docs/N8N.md`](docs/N8N.md). Com o n8n local, as agendas só disparam com o n8n e o app ligados.
+
+### Teste de 2 minutos
+
+Preparação da semana sintética e roteiro do observador: [`docs/TESTE_2_MINUTOS.md`](docs/TESTE_2_MINUTOS.md).
+
+## O que ainda não existe
+
+- App publicado com HTTPS (hoje roda local).
+- Disparo pela agenda do n8n testado: os workflows foram executados manualmente em 01/11/2026, mas ainda não foram ativados ([`docs/N8N.md`](docs/N8N.md), seção 6).
+- Teste do painel no celular.
+- Medida independente da classificação (a v2 exige um conjunto novo de avaliações).
 
 ## Resultado da avaliação oficial da v1
 
@@ -77,18 +173,6 @@ saiu certa e as categorias diferiram do gabarito, igual nas 3 rodadas:
   alertas; saídas inválidas nas 3 rodadas e nos 65 itens: 0 de 195).
 - Mudar o prompt depois deste resultado cria uma v2, com métricas exploratórias; o resultado da v1
   continua publicado.
-
-## Como rodar o servidor
-
-As variáveis ficam no `.env`, que não vai para o Git: `RADAR_API_KEY`, `RADAR_DB`, `RADAR_URL_BASE` (endereço público do app, http ou https, sem barra final, base do link do painel), `ANTHROPIC_API_KEY`, `RADAR_TELEGRAM_TOKEN` e `RADAR_TELEGRAM_CHAT_ID`. O uvicorn carrega o arquivo com `--env-file`:
-
-```
-uvicorn app.main:app --env-file .env
-```
-
-A v1 roda com **um processo**: o uvicorn sem `--workers`, que é o padrão. O SQLite aceita um escritor por vez, e a trava que evita o envio duplicado de alerta vale dentro do processo. Com `--workers N`, uma mensagem de alerta pode sair duplicada num restart. É uma limitação conhecida; a alternativa futura é um estado "em envio" no esquema.
-
-`GET /resumo-semanal` (com `X-API-Key`) devolve o resumo da última semana completa, ou da semana de `?semana=AAAA-MM-DD`. Cada chamada com algo a enviar cria um link novo do painel.
 
 ## Limitações
 
