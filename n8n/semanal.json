@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "http://localhost:8000/resumo-semanal",
+        "url": "http://127.0.0.1:8000/resumo-semanal",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {}

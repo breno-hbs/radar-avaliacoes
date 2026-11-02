@@ -15,7 +15,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 PASTA = RAIZ / "n8n"
 DOC = RAIZ / "docs" / "N8N.md"
 
-URL_BASE = "http://localhost:8000"
+URL_BASE = "http://127.0.0.1:8000"
 URL_TELEGRAM = "https://api.telegram.org/bot<TOKEN_DO_BOT>/sendMessage"
 
 # Formato de token de bot do Telegram (pedido do Breno) e de chaves comuns de API.
@@ -105,6 +105,12 @@ def test_nenhum_json_de_n8n_fora_dos_dois_esperados():
         texto = p.read_text(encoding="utf-8")
         for padrao in PADROES_DE_SEGREDO:
             assert not padrao.search(texto)
+
+
+def test_nenhum_json_usa_localhost():
+    # No Windows, localhost pode resolver para ::1 enquanto o uvicorn escuta em IPv4 (conexão recusada no n8n).
+    for p in PASTA.glob("*.json"):
+        assert "localhost" not in p.read_text(encoding="utf-8"), f"{p.name} usa localhost; use 127.0.0.1"
 
 
 def test_documentacao_sem_segredo():
