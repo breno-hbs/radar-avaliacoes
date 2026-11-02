@@ -54,6 +54,8 @@ A v1 não tem aviso de fim depois do último card. Que isso explique a dúvida d
 
 O roteiro está em [`docs/TESTE_2_MINUTOS.md`](docs/TESTE_2_MINUTOS.md).
 
+A comparação entre uma estimativa de 20 min de leitura manual e o tempo medido está em [`docs/ANTES_E_DEPOIS.md`](docs/ANTES_E_DEPOIS.md), descrita como estimativa de cenário.
+
 ## Como rodar
 
 Ative o ambiente (dependências em `requirements.txt`; `requirements-dev.txt` para os testes):
